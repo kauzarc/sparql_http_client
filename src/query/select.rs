@@ -27,14 +27,14 @@ impl<'a> SelectQuery<'a> {
         }
     }
 
-    pub async fn run(self) -> Result<response::QueryResponse, error::QueryError> {
+    pub async fn run(self) -> Result<response::SelectQueryResponse, error::QueryError> {
         Ok(self
             .endpoint
             .request()
             .form(&[("query", self.query.to_string())])
             .send()
             .await?
-            .json::<response::QueryResponse>()
+            .json::<response::SelectQueryResponse>()
             .await?)
     }
 }
