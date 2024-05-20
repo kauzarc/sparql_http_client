@@ -291,6 +291,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "getrandom"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4567c8db10ae91089c99af84c68c38da3ec2f087c3f82960bcdbf3656b6f4d7"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "wasi",
+]
+
+[[package]]
 name = "gimli"
 version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -624,6 +635,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxilangtag"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23f3f87617a86af77fa3691e6350483e7154c2ead9f1261b75130e21ca0f8acb"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "oxiri"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d05417ee46e2eb40dd9d590b4d67fc2408208b3a48a6b7f71d2bc1d7ce12a3e0"
+
+[[package]]
+name = "oxrdf"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "309287c8a757e25e06a6156acbd73770bac3e319123f5b4bc0a42e232caf97a5"
+dependencies = [
+ "oxilangtag",
+ "oxiri",
+ "rand",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -645,6 +682,33 @@ dependencies = [
  "smallvec",
  "windows-targets 0.52.5",
 ]
+
+[[package]]
+name = "peg"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a625d12ad770914cbf7eff6f9314c3ef803bfe364a1b20bc36ddf56673e71e5"
+dependencies = [
+ "peg-macros",
+ "peg-runtime",
+]
+
+[[package]]
+name = "peg-macros"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f241d42067ed3ab6a4fece1db720838e1418f36d868585a27931f95d6bc03582"
+dependencies = [
+ "peg-runtime",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "peg-runtime"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3aeb8f54c078314c2065ee649a7241f46b9d8e418e1a9581ba0546657d7aa3a"
 
 [[package]]
 name = "percent-encoding"
@@ -691,6 +755,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
+name = "ppv-lite86"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -706,6 +776,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fa76aaf39101c457836aec0ce2316dbdc3ab723cdda1c6bd4e6ad4208acaca7"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "rand"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
+dependencies = [
+ "libc",
+ "rand_chacha",
+ "rand_core",
+]
+
+[[package]]
+name = "rand_chacha"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
+dependencies = [
+ "ppv-lite86",
+ "rand_core",
+]
+
+[[package]]
+name = "rand_core"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+dependencies = [
+ "getrandom",
 ]
 
 [[package]]
@@ -916,6 +1016,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "spargebra"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fb45c36a61e7c8c0c949db8ee6aac1efda0511289ce9146ba28ba27b4760204"
+dependencies = [
+ "oxilangtag",
+ "oxiri",
+ "oxrdf",
+ "peg",
+ "rand",
+]
+
+[[package]]
 name = "sparql_http_client"
 version = "0.1.0"
 dependencies = [
@@ -924,6 +1037,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "spargebra",
  "thiserror",
  "tokio",
 ]

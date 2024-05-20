@@ -1,5 +1,5 @@
-use crate::{error, responses};
-use reqwest::header;
+use crate::{error, query};
+use reqwest::{header, RequestBuilder};
 use std::string;
 
 #[derive(Debug)]
@@ -50,9 +50,8 @@ pub struct Endpoint<'a> {
 }
 
 impl<'a> Endpoint<'a> {
-    pub async fn query(&self, query: &str) -> Result<responses::QueryResponse, error::Error> {
-        Ok(self
-            .client
+    pub(crate) fn request(&self) -> RequestBuilder {
+        self.client
             .inner
             .post(&self.url)
             .header(
@@ -60,42 +59,12 @@ impl<'a> Endpoint<'a> {
                 header::HeaderValue::from_static("application/sparql-results+json"),
             )
             .header(header::USER_AGENT, self.client.agent.header_value())
-            .form(&[("query", query)])
-            .send()
-            .await?
-            .json::<responses::QueryResponse>()
-            .await?)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test_client() -> SparqlClient {
-        SparqlClient::new(UserAgent {
-            name: "unit-test".into(),
-            version: clap::crate_version!().into(),
-            contact: "https://github.com/kauzarc/sparql_http_client".into(),
-        })
     }
 
-    #[tokio::test]
-    async fn query() -> anyhow::Result<()> {
-        test_client()
-            .endpoint("https://query.wikidata.org/bigdata/namespace/wdq/sparql")
-            .query(
-                r#"
-                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-
-                SELECT ?obj WHERE {
-                    ?sub ?pred ?obj .
-                } LIMIT 3
-                "#,
-            )
-            .await?;
-
-        Ok(())
+    pub fn select<Q>(&self, query: Q) -> Result<query::select::SelectQuery, error::QueryError>
+    where
+        Q: TryInto<spargebra::Query, Error = spargebra::ParseError>,
+    {
+        query::select::SelectQuery::new(self, query)
     }
 }

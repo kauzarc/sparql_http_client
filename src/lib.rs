@@ -1,6 +1,7 @@
 pub mod client;
 pub mod error;
-pub mod responses;
+pub mod query;
+pub mod response;
 
 #[cfg(test)]
 mod tests {
