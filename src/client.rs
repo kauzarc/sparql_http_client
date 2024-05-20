@@ -37,22 +37,29 @@ impl SparqlClient {
         }
     }
 
-    pub async fn query<U>(
-        &self,
-        endpoint: U,
-        query: &str,
-    ) -> Result<responses::QueryResponse, error::Error>
-    where
-        U: reqwest::IntoUrl,
-    {
+    pub fn endpoint<'a>(&'a self, url: &str) -> Endpoint<'a> {
+        Endpoint {
+            url: url.into(),
+            client: &self,
+        }
+    }
+}
+pub struct Endpoint<'a> {
+    url: string::String,
+    client: &'a SparqlClient,
+}
+
+impl<'a> Endpoint<'a> {
+    pub async fn query(&self, query: &str) -> Result<responses::QueryResponse, error::Error> {
         Ok(self
+            .client
             .inner
-            .post(endpoint)
+            .post(&self.url)
             .header(
                 header::ACCEPT,
                 header::HeaderValue::from_static("application/sparql-results+json"),
             )
-            .header(header::USER_AGENT, self.agent.header_value())
+            .header(header::USER_AGENT, self.client.agent.header_value())
             .form(&[("query", query)])
             .send()
             .await?
@@ -76,8 +83,8 @@ mod tests {
     #[tokio::test]
     async fn query() -> anyhow::Result<()> {
         test_client()
+            .endpoint("https://query.wikidata.org/bigdata/namespace/wdq/sparql")
             .query(
-                "https://query.wikidata.org/bigdata/namespace/wdq/sparql",
                 r#"
                 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
                 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
