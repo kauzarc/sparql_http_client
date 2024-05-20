@@ -69,7 +69,7 @@ mod tests {
         SparqlClient::new(UserAgent {
             name: "unit-test".into(),
             version: clap::crate_version!().into(),
-            contact: "todo@example.org".into(),
+            contact: "https://github.com/kauzarc/sparql_http_client".into(),
         })
     }
 
