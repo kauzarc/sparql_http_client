@@ -29,11 +29,17 @@ pub enum RDFTerm {
     #[serde(rename = "uri")]
     IRI { value: string::String },
     #[serde(rename = "literal")]
-    Literal {
+    Literal { value: string::String },
+    #[serde(rename = "literal")]
+    LiteralWithLanguage {
         value: string::String,
         #[serde(rename = "xml:lang")]
-        lang: Option<string::String>,
-        datatype: Option<string::String>,
+        lang: string::String,
+    },
+    #[serde(rename = "literal")]
+    LiteralWithDataType {
+        value: string::String,
+        datatype: string::String,
     },
     #[serde(rename = "bnode")]
     BlankNode { value: string::String },
@@ -41,7 +47,6 @@ pub enum RDFTerm {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     #[test]
@@ -63,16 +68,13 @@ mod tests {
                         "obj".into(),
                         RDFTerm::Literal {
                             value: "1.0.0".into(),
-                            lang: None,
-                            datatype: None,
                         },
                     )]),
                     collections::HashMap::from([(
                         "obj".into(),
-                        RDFTerm::Literal {
+                        RDFTerm::LiteralWithDataType {
                             value: "2023-01-30T23:00:08Z".into(),
-                            lang: None,
-                            datatype: Some("http://www.w3.org/2001/XMLSchema#dateTime".into()),
+                            datatype: "http://www.w3.org/2001/XMLSchema#dateTime".into(),
                         },
                     )]),
                 ],
@@ -115,6 +117,15 @@ mod tests {
                         }
                     ]
                 }
+            }
+            "#,
+        )?;
+
+        let _: QueryResponse = serde_json::from_str(
+            r#"
+            { 
+                "head" : { } ,
+                "boolean" : true
             }
             "#,
         )?;
