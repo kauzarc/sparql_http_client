@@ -3,6 +3,8 @@ pub mod error;
 pub mod query;
 pub mod response;
 
+pub use client::SparqlClient;
+
 #[cfg(test)]
 mod tests {
     use std::collections;

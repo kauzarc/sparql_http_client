@@ -43,17 +43,9 @@ impl<'a> SelectQuery<'a> {
 mod tests {
     use super::*;
 
-    fn test_client() -> client::SparqlClient {
-        client::SparqlClient::new(client::UserAgent {
-            name: "unit-test".into(),
-            version: clap::crate_version!().into(),
-            contact: "https://github.com/kauzarc/sparql_http_client".into(),
-        })
-    }
-
     #[tokio::test]
     async fn run() -> anyhow::Result<()> {
-        test_client()
+        client::SparqlClient::default()
             .endpoint("https://query.wikidata.org/bigdata/namespace/wdq/sparql")
             .select(
                 r#"

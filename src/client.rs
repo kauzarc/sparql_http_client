@@ -2,7 +2,7 @@ use crate::{error, query};
 use reqwest::{header, RequestBuilder};
 use std::string;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct UserAgent {
     pub name: string::String,
     pub version: string::String,
@@ -23,7 +23,7 @@ impl UserAgent {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SparqlClient {
     inner: reqwest::Client,
     agent: UserAgent,
@@ -66,5 +66,15 @@ impl<'a> Endpoint<'a> {
         Q: TryInto<spargebra::Query, Error = spargebra::ParseError>,
     {
         query::select::SelectQuery::new(self, query)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_client() {
+        SparqlClient::default();
     }
 }
