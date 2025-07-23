@@ -1,51 +1,62 @@
 use std::{collections, string};
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct SelectQueryResponse {
     pub head: SelectHead,
     pub results: Results,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct SelectHead {
     pub vars: Vec<string::String>,
     pub link: Option<Vec<string::String>>,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct Results {
     pub bindings: Vec<collections::HashMap<string::String, RDFTerm>>,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct RDFTerm {
+    pub value: string::String,
+    #[serde(flatten)]
+    pub kind: RDFType,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
-pub enum RDFTerm {
+pub enum RDFType {
     #[serde(rename = "uri")]
-    IRI { value: string::String },
+    IRI,
     #[serde(rename = "literal")]
-    Literal { value: string::String },
-    #[serde(rename = "literal")]
-    LiteralWithLanguage {
-        value: string::String,
+    Literal {
+        #[serde(flatten)]
+        kind: LiteralType,
+    },
+    #[serde(rename = "bnode")]
+    BlankNode,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum LiteralType {
+    WithLanguage {
         #[serde(rename = "xml:lang")]
         lang: string::String,
     },
-    #[serde(rename = "literal")]
-    LiteralWithDataType {
-        value: string::String,
+    WithDataType {
         datatype: string::String,
     },
-    #[serde(rename = "bnode")]
-    BlankNode { value: string::String },
+    Simple {},
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn serialize() -> anyhow::Result<()> {
-        let _ = serde_json::to_string(&SelectQueryResponse {
+    fn struct_format() -> SelectQueryResponse {
+        SelectQueryResponse {
             head: SelectHead {
                 vars: vec!["obj".into()],
                 link: None,
@@ -54,66 +65,83 @@ mod tests {
                 bindings: vec![
                     collections::HashMap::from([(
                         "obj".into(),
-                        RDFTerm::IRI {
+                        RDFTerm {
                             value: "http://creativecommons.org/publicdomain/zero/1.0/".into(),
+                            kind: RDFType::IRI,
                         },
                     )]),
                     collections::HashMap::from([(
                         "obj".into(),
-                        RDFTerm::Literal {
+                        RDFTerm {
                             value: "1.0.0".into(),
+                            kind: RDFType::Literal {
+                                kind: LiteralType::Simple {},
+                            },
                         },
                     )]),
                     collections::HashMap::from([(
                         "obj".into(),
-                        RDFTerm::LiteralWithDataType {
+                        RDFTerm {
                             value: "2023-01-30T23:00:08Z".into(),
-                            datatype: "http://www.w3.org/2001/XMLSchema#dateTime".into(),
+                            kind: RDFType::Literal {
+                                kind: LiteralType::WithDataType {
+                                    datatype: "http://www.w3.org/2001/XMLSchema#dateTime".into(),
+                                },
+                            },
                         },
                     )]),
                 ],
             },
-        })?;
+        }
+    }
+
+    fn text_format() -> &'static str {
+        r#"
+        {
+            "head": {
+                "vars": [
+                    "obj"
+                ]
+            },
+            "results": {
+                "bindings": [
+                    {
+                        "obj": {
+                            "type": "uri",
+                            "value": "http://creativecommons.org/publicdomain/zero/1.0/"
+                        }
+                    },
+                    {
+                        "obj": {
+                            "type": "literal",
+                            "value": "1.0.0"
+                        }
+                    },
+                    {
+                        "obj": {
+                            "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+                            "type": "literal",
+                            "value": "2023-01-30T23:00:08Z"
+                        }
+                    }
+                ]
+            }
+        }
+        "#
+    }
+
+    #[test]
+    fn serialize() -> anyhow::Result<()> {
+        let _ = serde_json::to_string(&struct_format())?;
 
         Ok(())
     }
 
     #[test]
     fn deserialize() -> anyhow::Result<()> {
-        let _: SelectQueryResponse = serde_json::from_str(
-            r#"
-            {
-                "head": {
-                    "vars": [
-                        "obj"
-                    ]
-                },
-                "results": {
-                    "bindings": [
-                        {
-                            "obj": {
-                                "type": "uri",
-                                "value": "http://creativecommons.org/publicdomain/zero/1.0/"
-                            }
-                        },
-                        {
-                            "obj": {
-                                "type": "literal",
-                                "value": "1.0.0"
-                            }
-                        },
-                        {
-                            "obj": {
-                                "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
-                                "type": "literal",
-                                "value": "2023-01-30T23:00:08Z"
-                            }
-                        }
-                    ]
-                }
-            }
-            "#,
-        )?;
+        let into_struct: SelectQueryResponse = serde_json::from_str(text_format())?;
+
+        assert_eq!(into_struct, struct_format());
 
         Ok(())
     }
