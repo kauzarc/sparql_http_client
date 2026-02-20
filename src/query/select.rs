@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use spargebra::SparqlParser;
 
-use crate::{client, response};
+use crate::response::SelectQueryResponse;
 use super::{QueryString, QueryStringError, QueryType};
 
 #[derive(Clone)]
@@ -34,37 +34,17 @@ impl Deref for SelectQueryString {
 }
 
 impl QueryString for SelectQueryString {
-    type Query<'a> = SelectQuery<'a>;
+    type Response = SelectQueryResponse;
 
     fn new_unchecked(s: &str) -> Self {
         Self(Arc::from(s))
-    }
-
-    fn build<'a>(self, endpoint: &'a client::Endpoint) -> SelectQuery<'a> {
-        SelectQuery { endpoint, query: self }
-    }
-}
-
-pub struct SelectQuery<'a> {
-    endpoint: &'a client::Endpoint,
-    query: SelectQueryString,
-}
-
-impl<'a> SelectQuery<'a> {
-    pub async fn run(self) -> Result<response::SelectQueryResponse, reqwest::Error> {
-        self.endpoint
-            .request()
-            .form(&[("query", &*self.query)])
-            .send()
-            .await?
-            .json::<response::SelectQueryResponse>()
-            .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client;
 
     #[tokio::test]
     async fn run() -> anyhow::Result<()> {

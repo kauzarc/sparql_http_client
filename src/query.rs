@@ -7,19 +7,44 @@ pub use error::QueryStringError;
 pub use select::SelectQueryString;
 
 use std::fmt;
+use std::ops::Deref;
 use std::str::FromStr;
 
 use spargebra::Query;
 
 use crate::client::Endpoint;
+use crate::response::QueryResponse;
 
-pub trait QueryString: Sized + Clone + FromStr<Err = QueryStringError> {
-    type Query<'a>;
+pub trait QueryString: Sized + Clone + Deref<Target = str> + FromStr<Err = QueryStringError> {
+    type Response: QueryResponse;
 
     #[doc(hidden)]
     fn new_unchecked(s: &str) -> Self;
-    fn build<'a>(self, endpoint: &'a Endpoint) -> Self::Query<'a>;
+
+    fn build<'a>(self, endpoint: &'a Endpoint) -> SparqlQuery<'a, Self> {
+        SparqlQuery { endpoint, query: self }
+    }
 }
+
+pub struct SparqlQuery<'a, Q> {
+    endpoint: &'a Endpoint,
+    query: Q,
+}
+
+impl<'a, Q: QueryString> SparqlQuery<'a, Q> {
+    pub async fn run(self) -> Result<Q::Response, reqwest::Error> {
+        self.endpoint
+            .request()
+            .form(&[("query", &*self.query)])
+            .send()
+            .await?
+            .json::<Q::Response>()
+            .await
+    }
+}
+
+pub type SelectQuery<'a> = SparqlQuery<'a, SelectQueryString>;
+pub type AskQuery<'a> = SparqlQuery<'a, AskQueryString>;
 
 #[derive(Debug)]
 pub enum QueryType {

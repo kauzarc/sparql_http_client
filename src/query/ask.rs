@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use spargebra::SparqlParser;
 
-use crate::{client, response};
+use crate::response::AskQueryResponse;
 use super::{QueryString, QueryStringError, QueryType};
 
 #[derive(Clone)]
@@ -34,37 +34,17 @@ impl Deref for AskQueryString {
 }
 
 impl QueryString for AskQueryString {
-    type Query<'a> = AskQuery<'a>;
+    type Response = AskQueryResponse;
 
     fn new_unchecked(s: &str) -> Self {
         Self(Arc::from(s))
-    }
-
-    fn build<'a>(self, endpoint: &'a client::Endpoint) -> AskQuery<'a> {
-        AskQuery { endpoint, query: self }
-    }
-}
-
-pub struct AskQuery<'a> {
-    endpoint: &'a client::Endpoint,
-    query: AskQueryString,
-}
-
-impl<'a> AskQuery<'a> {
-    pub async fn run(self) -> Result<response::AskQueryResponse, reqwest::Error> {
-        self.endpoint
-            .request()
-            .form(&[("query", &*self.query)])
-            .send()
-            .await?
-            .json::<response::AskQueryResponse>()
-            .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client;
 
     #[tokio::test]
     async fn run() -> anyhow::Result<()> {

@@ -2,7 +2,7 @@ use std::string;
 
 use reqwest::{header, RequestBuilder};
 
-use crate::query;
+use crate::query::{self, SparqlQuery};
 
 #[derive(Debug, Default, Clone)]
 pub struct UserAgent {
@@ -65,7 +65,7 @@ impl Endpoint {
             .header(header::USER_AGENT, self.client.agent.header_value())
     }
 
-    pub fn build_query<Q>(&self, query: Q) -> Q::Query<'_>
+    pub fn build_query<Q>(&self, query: Q) -> SparqlQuery<'_, Q>
     where
         Q: query::QueryString,
     {
