@@ -6,12 +6,14 @@ Example :
 
 ```Rust
 use anyhow;
-use sparql_http_client::SparqlClient;
+use sparql_http_client::{Endpoint, SparqlClient};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let client = SparqlClient::default();
-    let endpoint = client.endpoint("https://query.wikidata.org/bigdata/namespace/wdq/sparql");
+    let endpoint = Endpoint::new(
+        SparqlClient::default(),
+        "https://query.wikidata.org/bigdata/namespace/wdq/sparql",
+    );
 
     let query_response = endpoint
         .select(
