@@ -1,6 +1,8 @@
-use crate::{error, query};
-use reqwest::{header, RequestBuilder};
 use std::string;
+
+use reqwest::{header, RequestBuilder};
+
+use crate::query;
 
 #[derive(Debug, Default, Clone)]
 pub struct UserAgent {
@@ -63,12 +65,11 @@ impl Endpoint {
             .header(header::USER_AGENT, self.client.agent.header_value())
     }
 
-    pub fn select(&self, query: &str) -> Result<query::select::SelectQuery<'_>, error::QueryError> {
-        query::select::SelectQuery::new(self, query)
-    }
-
-    pub fn ask(&self, query: &str) -> Result<query::ask::AskQuery<'_>, error::QueryError> {
-        query::ask::AskQuery::new(self, query)
+    pub fn build_query<Q>(&self, query: Q) -> Q::Query<'_>
+    where
+        Q: query::QueryString,
+    {
+        query.build(self)
     }
 }
 

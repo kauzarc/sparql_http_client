@@ -1,10 +1,9 @@
 pub mod client;
-pub mod error;
 pub mod query;
 pub mod response;
 
-pub use client::Endpoint;
-pub use client::SparqlClient;
+pub use client::{Endpoint, SparqlClient, UserAgent};
+pub use query::{AskQueryString, QueryString, QueryStringError, QueryType, SelectQueryString};
 
 #[cfg(test)]
 mod tests {
