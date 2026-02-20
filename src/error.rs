@@ -3,7 +3,7 @@ use crate::query;
 #[derive(Debug, thiserror::Error)]
 pub enum QueryError {
     #[error("error during parsing: {0}")]
-    ParseError(#[from] spargebra::ParseError),
+    ParseError(#[from] spargebra::SparqlSyntaxError),
 
     #[error(
         "type error: {:?} was expected but {:?} was provided",

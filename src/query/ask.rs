@@ -7,14 +7,11 @@ pub struct AskQuery<'a> {
 }
 
 impl<'a> AskQuery<'a> {
-    pub(crate) fn new<Q>(
+    pub(crate) fn new(
         endpoint: &'a client::Endpoint,
-        query: Q,
-    ) -> Result<AskQuery<'a>, error::QueryError>
-    where
-        Q: TryInto<spargebra::Query, Error = spargebra::ParseError>,
-    {
-        let query = query.try_into()?;
+        query: &str,
+    ) -> Result<AskQuery<'a>, error::QueryError> {
+        let query = spargebra::SparqlParser::new().parse_query(query)?;
         let query_type = QueryType::from(&query);
 
         if let QueryType::Ask = query_type {
@@ -50,15 +47,15 @@ mod tests {
             "https://query.wikidata.org/bigdata/namespace/wdq/sparql",
         )
         .ask(
-                r#"
-                PREFIX wd: <http://www.wikidata.org/entity/>
-                PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+            r#"
+            PREFIX wd: <http://www.wikidata.org/entity/>
+            PREFIX wdt: <http://www.wikidata.org/prop/direct/>
 
-                ASK { wd:Q243 wdt:P31 wd:Q570116 }
-                "#,
-            )?
-            .run()
-            .await?;
+            ASK { wd:Q243 wdt:P31 wd:Q570116 }
+            "#,
+        )?
+        .run()
+        .await?;
 
         Ok(())
     }

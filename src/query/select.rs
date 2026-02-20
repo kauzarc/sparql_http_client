@@ -7,14 +7,11 @@ pub struct SelectQuery<'a> {
 }
 
 impl<'a> SelectQuery<'a> {
-    pub(crate) fn new<Q>(
+    pub(crate) fn new(
         endpoint: &'a client::Endpoint,
-        query: Q,
-    ) -> Result<SelectQuery<'a>, error::QueryError>
-    where
-        Q: TryInto<spargebra::Query, Error = spargebra::ParseError>,
-    {
-        let query = query.try_into()?;
+        query: &str,
+    ) -> Result<SelectQuery<'a>, error::QueryError> {
+        let query = spargebra::SparqlParser::new().parse_query(query)?;
         let query_type = QueryType::from(&query);
 
         if let QueryType::Select = query_type {
@@ -50,17 +47,17 @@ mod tests {
             "https://query.wikidata.org/bigdata/namespace/wdq/sparql",
         )
         .select(
-                r#"
-                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            r#"
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
-                SELECT ?obj WHERE {
-                    ?sub ?pred ?obj .
-                } LIMIT 3
-                "#,
-            )?
-            .run()
-            .await?;
+            SELECT ?obj WHERE {
+                ?sub ?pred ?obj .
+            } LIMIT 3
+            "#,
+        )?
+        .run()
+        .await?;
 
         Ok(())
     }

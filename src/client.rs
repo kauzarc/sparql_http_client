@@ -63,17 +63,11 @@ impl Endpoint {
             .header(header::USER_AGENT, self.client.agent.header_value())
     }
 
-    pub fn select<Q>(&self, query: Q) -> Result<query::select::SelectQuery<'_>, error::QueryError>
-    where
-        Q: TryInto<spargebra::Query, Error = spargebra::ParseError>,
-    {
+    pub fn select(&self, query: &str) -> Result<query::select::SelectQuery<'_>, error::QueryError> {
         query::select::SelectQuery::new(self, query)
     }
 
-    pub fn ask<Q>(&self, query: Q) -> Result<query::ask::AskQuery<'_>, error::QueryError>
-    where
-        Q: TryInto<spargebra::Query, Error = spargebra::ParseError>,
-    {
+    pub fn ask(&self, query: &str) -> Result<query::ask::AskQuery<'_>, error::QueryError> {
         query::ask::AskQuery::new(self, query)
     }
 }
