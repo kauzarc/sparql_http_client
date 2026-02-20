@@ -6,9 +6,9 @@ pub enum QueryError {
     ParseError(#[from] spargebra::ParseError),
 
     #[error(
-        "type error: {:?} was expected but {:?} was provided when",
-        provided,
-        expected
+        "type error: {:?} was expected but {:?} was provided",
+        expected,
+        provided
     )]
     TypeError {
         expected: query::QueryType,

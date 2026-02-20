@@ -16,8 +16,8 @@ impl UserAgent {
             self.name,
             self.version,
             self.contact,
-            clap::crate_name!(),
-            clap::crate_version!()
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION")
         ))
         .expect("valid charcters")
     }
@@ -40,7 +40,7 @@ impl SparqlClient {
     pub fn endpoint<'a>(&'a self, url: &str) -> Endpoint<'a> {
         Endpoint {
             url: url.into(),
-            client: &self,
+            client: self,
         }
     }
 }
@@ -61,11 +61,18 @@ impl<'a> Endpoint<'a> {
             .header(header::USER_AGENT, self.client.agent.header_value())
     }
 
-    pub fn select<Q>(&self, query: Q) -> Result<query::select::SelectQuery, error::QueryError>
+    pub fn select<Q>(&self, query: Q) -> Result<query::select::SelectQuery<'_>, error::QueryError>
     where
         Q: TryInto<spargebra::Query, Error = spargebra::ParseError>,
     {
         query::select::SelectQuery::new(self, query)
+    }
+
+    pub fn ask<Q>(&self, query: Q) -> Result<query::ask::AskQuery<'_>, error::QueryError>
+    where
+        Q: TryInto<spargebra::Query, Error = spargebra::ParseError>,
+    {
+        query::ask::AskQuery::new(self, query)
     }
 }
 
