@@ -2,13 +2,13 @@ use super::*;
 use crate::{client, error, response};
 
 pub struct AskQuery<'a> {
-    endpoint: &'a client::Endpoint<'a>,
+    endpoint: &'a client::Endpoint,
     query: spargebra::Query,
 }
 
 impl<'a> AskQuery<'a> {
     pub(crate) fn new<Q>(
-        endpoint: &'a client::Endpoint<'a>,
+        endpoint: &'a client::Endpoint,
         query: Q,
     ) -> Result<AskQuery<'a>, error::QueryError>
     where
@@ -45,9 +45,11 @@ mod tests {
 
     #[tokio::test]
     async fn run() -> anyhow::Result<()> {
-        client::SparqlClient::default()
-            .endpoint("https://query.wikidata.org/bigdata/namespace/wdq/sparql")
-            .ask(
+        client::Endpoint::new(
+            client::SparqlClient::default(),
+            "https://query.wikidata.org/bigdata/namespace/wdq/sparql",
+        )
+        .ask(
                 r#"
                 PREFIX wd: <http://www.wikidata.org/entity/>
                 PREFIX wdt: <http://www.wikidata.org/prop/direct/>

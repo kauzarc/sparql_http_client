@@ -3,6 +3,7 @@ pub mod error;
 pub mod query;
 pub mod response;
 
+pub use client::Endpoint;
 pub use client::SparqlClient;
 
 #[cfg(test)]

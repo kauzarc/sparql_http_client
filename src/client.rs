@@ -2,7 +2,7 @@ use crate::{error, query};
 use reqwest::{header, RequestBuilder};
 use std::string;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct UserAgent {
     pub name: string::String,
     pub version: string::String,
@@ -23,7 +23,7 @@ impl UserAgent {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SparqlClient {
     inner: reqwest::Client,
     agent: UserAgent,
@@ -36,20 +36,22 @@ impl SparqlClient {
             agent: user_agent,
         }
     }
+}
 
-    pub fn endpoint<'a>(&'a self, url: &str) -> Endpoint<'a> {
-        Endpoint {
+#[derive(Clone)]
+pub struct Endpoint {
+    url: string::String,
+    client: SparqlClient,
+}
+
+impl Endpoint {
+    pub fn new(client: SparqlClient, url: &str) -> Self {
+        Self {
             url: url.into(),
-            client: self,
+            client,
         }
     }
-}
-pub struct Endpoint<'a> {
-    url: string::String,
-    client: &'a SparqlClient,
-}
 
-impl<'a> Endpoint<'a> {
     pub(crate) fn request(&self) -> RequestBuilder {
         self.client
             .inner
