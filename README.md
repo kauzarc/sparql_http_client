@@ -1,11 +1,26 @@
 # sparql_http_client
 
-Simple sparql client for rust.
+Simple SPARQL client for Rust.
 
-Example :
+## Compile-time query validation
 
-```Rust
-use sparql_http_client::{Endpoint, SelectQuery, SparqlClient};
+The `query!` macro parses and validates the SPARQL query string **at compile time**:
+
+- Syntax errors are caught as compile errors, not runtime panics.
+- The query kind (`SELECT`, `ASK`, …) is resolved at compile time, so the return type is
+  already [`SelectQuery`] or [`AskQuery`] — no runtime type dispatch, no `Result` to unwrap.
+
+```rust
+// This is a compile error — caught before the binary is ever built:
+let q = query!(endpoint, "SELCT ?s WHERE { ?s ?p ?o }");
+//                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// error: SPARQL syntax error: …
+```
+
+## Example
+
+```rust
+use sparql_http_client::{query, Endpoint, SparqlClient};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -14,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
         "https://query.wikidata.org/bigdata/namespace/wdq/sparql",
     );
 
-    let query: SelectQuery = endpoint.build_query(r#"
+    let query = query!(endpoint, r#"
         PREFIX wdt: <http://www.wikidata.org/prop/direct/>
         PREFIX wd: <http://www.wikidata.org/entity/>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -32,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
         }
         ORDER BY DESC(?population)
         LIMIT 3
-    "#.parse()?);
+    "#);
 
     for bindings in query.run().await?.results.bindings {
         println!("{:?}", bindings);
