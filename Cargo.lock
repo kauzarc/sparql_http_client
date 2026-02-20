@@ -951,6 +951,7 @@ dependencies = [
  "serde",
  "serde_json",
  "spargebra",
+ "sparql_http_client_macros",
  "thiserror",
  "tokio",
 ]
@@ -958,6 +959,12 @@ dependencies = [
 [[package]]
 name = "sparql_http_client_macros"
 version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "spargebra",
+ "syn",
+]
 
 [[package]]
 name = "syn"
