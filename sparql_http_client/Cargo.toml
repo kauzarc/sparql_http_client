@@ -5,6 +5,7 @@ edition = "2021"
 description = "Async, typed SPARQL HTTP client with optional compile-time query validation"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/kauzarc/sparql_http_client"
+readme = "README.md"
 keywords = ["sparql", "rdf", "semantic-web", "async"]
 categories = ["network-programming", "database"]
 
