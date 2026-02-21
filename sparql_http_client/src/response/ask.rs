@@ -11,6 +11,18 @@ pub struct AskHead {
     pub link: Option<Box<[Box<str>]>>,
 }
 
+impl From<AskQueryResponse> for bool {
+    fn from(r: AskQueryResponse) -> Self {
+        r.boolean
+    }
+}
+
+impl From<&AskQueryResponse> for bool {
+    fn from(r: &AskQueryResponse) -> Self {
+        r.boolean
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::AskQueryResponse;
