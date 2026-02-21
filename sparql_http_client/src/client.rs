@@ -66,7 +66,7 @@ impl Endpoint {
             .header(USER_AGENT, self.client.agent.header_value())
     }
 
-    pub fn build_query<Q>(&self, query: Q) -> SparqlQuery<'_, Q>
+    pub fn build_query<Q>(self, query: Q) -> SparqlQuery<Q>
     where
         Q: QueryString,
     {

@@ -23,7 +23,7 @@ pub trait QueryString:
     #[doc(hidden)]
     fn new_unchecked(s: &str) -> Self;
 
-    fn build<'a>(self, endpoint: &'a Endpoint) -> SparqlQuery<'a, Self> {
+    fn build(self, endpoint: Endpoint) -> SparqlQuery<Self> {
         SparqlQuery {
             endpoint,
             query: self,
@@ -31,12 +31,12 @@ pub trait QueryString:
     }
 }
 
-pub struct SparqlQuery<'a, Q> {
-    endpoint: &'a Endpoint,
+pub struct SparqlQuery<Q> {
+    endpoint: Endpoint,
     query: Q,
 }
 
-impl<'a, Q: QueryString> SparqlQuery<'a, Q> {
+impl<Q: QueryString> SparqlQuery<Q> {
     pub async fn run(self) -> Result<Q::Response, reqwest::Error> {
         self.endpoint
             .request()
@@ -48,8 +48,8 @@ impl<'a, Q: QueryString> SparqlQuery<'a, Q> {
     }
 }
 
-pub type SelectQuery<'a> = SparqlQuery<'a, SelectQueryString>;
-pub type AskQuery<'a> = SparqlQuery<'a, AskQueryString>;
+pub type SelectQuery = SparqlQuery<SelectQueryString>;
+pub type AskQuery = SparqlQuery<AskQueryString>;
 
 #[derive(Debug)]
 pub enum QueryType {
