@@ -1,16 +1,16 @@
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct AskQueryResponse {
     pub head: AskHead,
     pub boolean: bool,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct AskHead {
     pub link: Option<Box<[Box<str>]>>,
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::AskQueryResponse;
 
     #[test]

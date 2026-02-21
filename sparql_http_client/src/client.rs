@@ -22,7 +22,7 @@ impl UserAgent {
             env!("CARGO_PKG_NAME"),
             env!("CARGO_PKG_VERSION")
         ))
-        .expect("valid charcters")
+        .expect("valid characters")
     }
 }
 
@@ -41,7 +41,7 @@ impl SparqlClient {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Endpoint {
     url: Box<str>,
     client: SparqlClient,
