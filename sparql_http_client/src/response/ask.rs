@@ -1,10 +1,12 @@
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AskQueryResponse {
     pub head: AskHead,
     pub boolean: bool,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AskHead {
     pub link: Option<Box<[Box<str>]>>,
 }
@@ -17,7 +19,7 @@ mod tests {
     fn deserialize() -> anyhow::Result<()> {
         let _: AskQueryResponse = serde_json::from_str(
             r#"
-            { 
+            {
                 "head" : { } ,
                 "boolean" : true
             }

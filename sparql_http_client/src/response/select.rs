@@ -1,30 +1,88 @@
 use std::collections::HashMap;
+use std::slice::Iter;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SelectQueryResponse {
     pub head: SelectHead,
     pub results: Results,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+impl SelectQueryResponse {
+    pub fn vars(&self) -> &[Box<str>] {
+        &self.head.vars
+    }
+
+    pub fn rows(&self) -> &[HashMap<Box<str>, RDFTerm>] {
+        &self.results.bindings
+    }
+}
+
+impl<'a> IntoIterator for &'a SelectQueryResponse {
+    type Item = &'a HashMap<Box<str>, RDFTerm>;
+    type IntoIter = Iter<'a, HashMap<Box<str>, RDFTerm>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.rows().iter()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SelectHead {
     pub vars: Box<[Box<str>]>,
     pub link: Option<Box<[Box<str>]>>,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Results {
     pub bindings: Box<[HashMap<Box<str>, RDFTerm>]>,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RDFTerm {
     pub value: Box<str>,
     #[serde(flatten)]
     pub kind: RDFType,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+impl RDFTerm {
+    pub fn is_iri(&self) -> bool {
+        matches!(self.kind, RDFType::IRI)
+    }
+
+    pub fn is_literal(&self) -> bool {
+        matches!(self.kind, RDFType::Literal { .. })
+    }
+
+    pub fn is_blank_node(&self) -> bool {
+        matches!(self.kind, RDFType::BlankNode)
+    }
+
+    pub fn lang(&self) -> Option<&str> {
+        if let RDFType::Literal {
+            kind: LiteralType::WithLanguage { lang },
+        } = &self.kind
+        {
+            Some(lang)
+        } else {
+            None
+        }
+    }
+
+    pub fn datatype(&self) -> Option<&str> {
+        if let RDFType::Literal {
+            kind: LiteralType::WithDataType { datatype },
+        } = &self.kind
+        {
+            Some(datatype)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum RDFType {
     #[serde(rename = "uri")]
@@ -38,7 +96,7 @@ pub enum RDFType {
     BlankNode,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum LiteralType {
     WithLanguage {
