@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use spargebra::SparqlParser;
 
-use crate::response::SelectQueryResponse;
 use super::{QueryString, QueryStringError, QueryType};
+use crate::response::SelectQueryResponse;
 
 #[derive(Clone)]
 pub struct SelectQueryString(Arc<str>);
@@ -44,7 +44,7 @@ impl QueryString for SelectQueryString {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client;
+    use crate::client::{Endpoint, SparqlClient};
 
     #[tokio::test]
     async fn run() -> anyhow::Result<()> {
@@ -55,10 +55,11 @@ mod tests {
             SELECT ?obj WHERE {
                 ?sub ?pred ?obj .
             } LIMIT 3
-        "#.parse()?;
+        "#
+        .parse()?;
 
-        client::Endpoint::new(
-            client::SparqlClient::default(),
+        Endpoint::new(
+            SparqlClient::default(),
             "https://query.wikidata.org/bigdata/namespace/wdq/sparql",
         )
         .build_query(qs)

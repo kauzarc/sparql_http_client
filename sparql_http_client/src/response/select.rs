@@ -1,4 +1,4 @@
-use std::{collections, string};
+use std::collections::HashMap;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct SelectQueryResponse {
@@ -8,18 +8,18 @@ pub struct SelectQueryResponse {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct SelectHead {
-    pub vars: Vec<string::String>,
-    pub link: Option<Vec<string::String>>,
+    pub vars: Vec<String>,
+    pub link: Option<Vec<String>>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct Results {
-    pub bindings: Vec<collections::HashMap<string::String, RDFTerm>>,
+    pub bindings: Vec<HashMap<String, RDFTerm>>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct RDFTerm {
-    pub value: string::String,
+    pub value: String,
     #[serde(flatten)]
     pub kind: RDFType,
 }
@@ -43,10 +43,10 @@ pub enum RDFType {
 pub enum LiteralType {
     WithLanguage {
         #[serde(rename = "xml:lang")]
-        lang: string::String,
+        lang: String,
     },
     WithDataType {
-        datatype: string::String,
+        datatype: String,
     },
     Simple {},
 }
@@ -63,14 +63,14 @@ mod tests {
             },
             results: Results {
                 bindings: vec![
-                    collections::HashMap::from([(
+                    HashMap::from([(
                         "obj".into(),
                         RDFTerm {
                             value: "http://creativecommons.org/publicdomain/zero/1.0/".into(),
                             kind: RDFType::IRI,
                         },
                     )]),
-                    collections::HashMap::from([(
+                    HashMap::from([(
                         "obj".into(),
                         RDFTerm {
                             value: "1.0.0".into(),
@@ -79,7 +79,7 @@ mod tests {
                             },
                         },
                     )]),
-                    collections::HashMap::from([(
+                    HashMap::from([(
                         "obj".into(),
                         RDFTerm {
                             value: "2023-01-30T23:00:08Z".into(),

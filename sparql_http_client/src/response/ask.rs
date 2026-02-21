@@ -1,5 +1,3 @@
-use std::string;
-
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct AskQueryResponse {
     pub head: AskHead,
@@ -8,7 +6,7 @@ pub struct AskQueryResponse {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct AskHead {
-    pub link: Option<Vec<string::String>>,
+    pub link: Option<Vec<String>>,
 }
 
 #[cfg(test)]

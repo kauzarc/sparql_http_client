@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use spargebra::SparqlParser;
 
-use crate::response::AskQueryResponse;
 use super::{QueryString, QueryStringError, QueryType};
+use crate::response::AskQueryResponse;
 
 #[derive(Clone)]
 pub struct AskQueryString(Arc<str>);
@@ -44,7 +44,7 @@ impl QueryString for AskQueryString {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client;
+    use crate::client::{Endpoint, SparqlClient};
 
     #[tokio::test]
     async fn run() -> anyhow::Result<()> {
@@ -53,10 +53,11 @@ mod tests {
             PREFIX wdt: <http://www.wikidata.org/prop/direct/>
 
             ASK { wd:Q243 wdt:P31 wd:Q570116 }
-        "#.parse()?;
+        "#
+        .parse()?;
 
-        client::Endpoint::new(
-            client::SparqlClient::default(),
+        Endpoint::new(
+            SparqlClient::default(),
             "https://query.wikidata.org/bigdata/namespace/wdq/sparql",
         )
         .build_query(qs)
