@@ -31,6 +31,7 @@ pub trait QueryString:
     }
 }
 
+#[derive(Debug)]
 pub struct SparqlQuery<Q> {
     endpoint: Endpoint,
     query: Q,
@@ -51,7 +52,7 @@ impl<Q: QueryString> SparqlQuery<Q> {
 pub type SelectQuery = SparqlQuery<SelectQueryString>;
 pub type AskQuery = SparqlQuery<AskQueryString>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueryType {
     Select,
     Construct,

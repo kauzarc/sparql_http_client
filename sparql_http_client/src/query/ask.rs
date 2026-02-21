@@ -7,7 +7,7 @@ use spargebra::SparqlParser;
 use super::{QueryString, QueryStringError, QueryType};
 use crate::response::AskQueryResponse;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AskQueryString(Arc<str>);
 
 impl FromStr for AskQueryString {
