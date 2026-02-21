@@ -18,7 +18,10 @@ impl Parse for MacroInput {
         input.parse::<Token![,]>()?;
         let query_str = input.parse::<LitStr>()?;
         let _ = input.parse::<Token![,]>();
-        Ok(Self { endpoint, query_str })
+        Ok(Self {
+            endpoint,
+            query_str,
+        })
     }
 }
 
@@ -63,7 +66,10 @@ fn build_query_expr(endpoint: &Expr, qs_type: TokenStream2, normalized: &str) ->
 /// ```
 #[proc_macro]
 pub fn query(input: TokenStream) -> TokenStream {
-    let MacroInput { endpoint, query_str } = parse_macro_input!(input as MacroInput);
+    let MacroInput {
+        endpoint,
+        query_str,
+    } = parse_macro_input!(input as MacroInput);
 
     let parsed = match parse_sparql(&query_str) {
         Ok(q) => q,

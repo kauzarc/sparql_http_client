@@ -15,14 +15,19 @@ use spargebra::Query;
 use crate::client::Endpoint;
 use crate::response::QueryResponse;
 
-pub trait QueryString: Sized + Clone + Deref<Target = str> + FromStr<Err = QueryStringError> {
+pub trait QueryString:
+    Sized + Clone + Deref<Target = str> + FromStr<Err = QueryStringError>
+{
     type Response: QueryResponse;
 
     #[doc(hidden)]
     fn new_unchecked(s: &str) -> Self;
 
     fn build<'a>(self, endpoint: &'a Endpoint) -> SparqlQuery<'a, Self> {
-        SparqlQuery { endpoint, query: self }
+        SparqlQuery {
+            endpoint,
+            query: self,
+        }
     }
 }
 
