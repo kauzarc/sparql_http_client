@@ -8,6 +8,27 @@ use spargebra::SparqlParser;
 use super::{QueryString, QueryStringError, QueryType};
 use crate::response::AskQueryResponse;
 
+/// An owned, validated, normalized ASK query string.
+///
+/// Parse from a `&str` at runtime via [`str::parse`]:
+///
+/// ```
+/// use sparql_http_client::AskQueryString;
+///
+/// let qs: AskQueryString =
+///     "ASK { <http://example.org/> a <http://example.org/Thing> }".parse().unwrap();
+/// ```
+///
+/// Passing the wrong query kind returns a [`QueryStringError::WrongKind`](crate::QueryStringError::WrongKind):
+///
+/// ```
+/// use sparql_http_client::AskQueryString;
+///
+/// let result = "SELECT ?s WHERE { ?s ?p ?o }".parse::<AskQueryString>();
+/// assert!(result.is_err());
+/// ```
+///
+/// [`Deref`] and [`Display`](std::fmt::Display) both yield the normalised query string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AskQueryString(Arc<str>);
 

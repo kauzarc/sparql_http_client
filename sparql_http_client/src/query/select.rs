@@ -8,6 +8,36 @@ use spargebra::SparqlParser;
 use super::{QueryString, QueryStringError, QueryType};
 use crate::response::SelectQueryResponse;
 
+/// An owned, validated, normalized SELECT query string.
+///
+/// Parse from a `&str` at runtime via [`str::parse`]:
+///
+/// ```
+/// use sparql_http_client::SelectQueryString;
+///
+/// let qs: SelectQueryString = "SELECT ?s WHERE { ?s ?p ?o }".parse().unwrap();
+/// ```
+///
+/// Passing the wrong query kind returns a [`QueryStringError::WrongKind`](crate::QueryStringError::WrongKind):
+///
+/// ```
+/// use sparql_http_client::SelectQueryString;
+///
+/// let result = "ASK { <http://example.org/> a <http://example.org/Thing> }"
+///     .parse::<SelectQueryString>();
+/// assert!(result.is_err());
+/// ```
+///
+/// The stored string is the *normalised* form produced by the SPARQL parser,
+/// which may differ from the original in whitespace and casing.
+/// [`Deref`] and [`Display`](std::fmt::Display) both yield the normalised string:
+///
+/// ```
+/// use sparql_http_client::SelectQueryString;
+///
+/// let qs: SelectQueryString = "select ?s where { ?s ?p ?o }".parse().unwrap();
+/// assert!(qs.to_string().starts_with("SELECT"));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SelectQueryString(Arc<str>);
 
