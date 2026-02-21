@@ -5,7 +5,7 @@ use reqwest::{
 
 use crate::query::{QueryString, SparqlQuery};
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct UserAgent {
     pub name: Box<str>,
     pub version: Box<str>,

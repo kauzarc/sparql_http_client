@@ -1,3 +1,4 @@
+use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -30,6 +31,12 @@ impl Deref for AskQueryString {
 
     fn deref(&self) -> &str {
         &self.0
+    }
+}
+
+impl fmt::Display for AskQueryString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self)
     }
 }
 
