@@ -2,6 +2,11 @@
 name = "sparql_http_client_macros"
 version = "0.1.0"
 edition = "2021"
+description = "Proc-macro crate for sparql_http_client (compile-time SPARQL query validation)"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/kauzarc/sparql_http_client"
+keywords = ["sparql", "rdf", "semantic-web"]
+categories = ["network-programming", "database"]
 
 [lib]
 proc-macro = true
