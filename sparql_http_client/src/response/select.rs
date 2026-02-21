@@ -8,18 +8,18 @@ pub struct SelectQueryResponse {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct SelectHead {
-    pub vars: Vec<String>,
-    pub link: Option<Vec<String>>,
+    pub vars: Box<[Box<str>]>,
+    pub link: Option<Box<[Box<str>]>>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct Results {
-    pub bindings: Vec<HashMap<String, RDFTerm>>,
+    pub bindings: Box<[HashMap<Box<str>, RDFTerm>]>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct RDFTerm {
-    pub value: String,
+    pub value: Box<str>,
     #[serde(flatten)]
     pub kind: RDFType,
 }
@@ -43,10 +43,10 @@ pub enum RDFType {
 pub enum LiteralType {
     WithLanguage {
         #[serde(rename = "xml:lang")]
-        lang: String,
+        lang: Box<str>,
     },
     WithDataType {
-        datatype: String,
+        datatype: Box<str>,
     },
     Simple {},
 }
@@ -58,7 +58,7 @@ mod tests {
     fn struct_format() -> SelectQueryResponse {
         SelectQueryResponse {
             head: SelectHead {
-                vars: vec!["obj".into()],
+                vars: vec!["obj".into()].into(),
                 link: None,
             },
             results: Results {
@@ -90,7 +90,8 @@ mod tests {
                             },
                         },
                     )]),
-                ],
+                ]
+                .into(),
             },
         }
     }

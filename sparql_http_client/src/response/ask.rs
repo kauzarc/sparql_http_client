@@ -6,7 +6,7 @@ pub struct AskQueryResponse {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct AskHead {
-    pub link: Option<Vec<String>>,
+    pub link: Option<Box<[Box<str>]>>,
 }
 
 #[cfg(test)]

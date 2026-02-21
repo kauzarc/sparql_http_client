@@ -7,9 +7,9 @@ use crate::query::{QueryString, SparqlQuery};
 
 #[derive(Debug, Default, Clone)]
 pub struct UserAgent {
-    pub name: String,
-    pub version: String,
-    pub contact: String,
+    pub name: Box<str>,
+    pub version: Box<str>,
+    pub contact: Box<str>,
 }
 
 impl UserAgent {
@@ -43,7 +43,7 @@ impl SparqlClient {
 
 #[derive(Clone)]
 pub struct Endpoint {
-    url: String,
+    url: Box<str>,
     client: SparqlClient,
 }
 
@@ -58,7 +58,7 @@ impl Endpoint {
     pub(crate) fn request(&self) -> RequestBuilder {
         self.client
             .inner
-            .post(&self.url)
+            .post(&*self.url)
             .header(
                 ACCEPT,
                 HeaderValue::from_static("application/sparql-results+json"),
