@@ -13,7 +13,7 @@ use std::str::FromStr;
 use spargebra::Query;
 
 use crate::client::Endpoint;
-use crate::response::QueryResponse;
+use crate::response::{QueryResponse, SelectQueryStream, StreamError};
 
 /// An owned, validated, normalized SPARQL query string.
 ///
@@ -82,6 +82,30 @@ impl<Q: QueryString> SparqlQuery<Q> {
             .await?
             .json::<Q::Response>()
             .await
+    }
+}
+
+impl SparqlQuery<SelectQueryString> {
+    /// Sends the query and streams result rows as they arrive over the network.
+    ///
+    /// Unlike [`run`](SparqlQuery::run), this does not buffer the full response.
+    /// The endpoint is asked for `text/tab-separated-values`; the
+    /// [`head`](SelectQueryStream::head) field is populated from the first line,
+    /// then rows are yielded one at a time via [`SelectQueryStream::into_rows`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StreamError`] if the HTTP request fails or the header line
+    /// cannot be parsed. Per-row parse errors are yielded as `Err` items in
+    /// the row stream.
+    pub async fn run_stream(self) -> Result<SelectQueryStream, StreamError> {
+        let response = self
+            .endpoint
+            .request_tsv()
+            .form(&[("query", &*self.query)])
+            .send()
+            .await?;
+        SelectQueryStream::from_response(response).await
     }
 }
 

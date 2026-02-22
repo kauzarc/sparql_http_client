@@ -129,6 +129,17 @@ impl Endpoint {
             .header(USER_AGENT, self.client.agent.header_value())
     }
 
+    pub(crate) fn request_tsv(&self) -> RequestBuilder {
+        self.client
+            .inner
+            .post(&*self.url)
+            .header(
+                ACCEPT,
+                HeaderValue::from_static("text/tab-separated-values"),
+            )
+            .header(USER_AGENT, self.client.agent.header_value())
+    }
+
     /// Wraps `query` in a [`SparqlQuery`] ready to be executed against this endpoint.
     ///
     /// This method consumes the endpoint. To reuse the endpoint for multiple

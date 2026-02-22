@@ -9,9 +9,11 @@
 
 mod ask;
 mod select;
+mod select_stream;
 
 pub use ask::*;
 pub use select::*;
+pub use select_stream::*;
 
 use serde::de::DeserializeOwned;
 

@@ -83,25 +83,43 @@ mod tests {
     use super::*;
     use crate::client::{Endpoint, SparqlClient};
 
+    const WIKIDATA: &str = "https://query.wikidata.org/bigdata/namespace/wdq/sparql";
+
+    const QUERY: &str = r#"
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+        SELECT ?obj WHERE {
+            ?sub ?pred ?obj .
+        } LIMIT 3
+    "#;
+
     #[tokio::test]
     async fn run() -> anyhow::Result<()> {
-        let qs: SelectQueryString = r#"
-            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        let qs: SelectQueryString = QUERY.parse()?;
+        Endpoint::new(SparqlClient::default(), WIKIDATA)
+            .build_query(qs)
+            .run()
+            .await?;
+        Ok(())
+    }
 
-            SELECT ?obj WHERE {
-                ?sub ?pred ?obj .
-            } LIMIT 3
-        "#
-        .parse()?;
+    #[tokio::test]
+    async fn run_stream() -> anyhow::Result<()> {
+        use futures_util::StreamExt;
 
-        Endpoint::new(
-            SparqlClient::default(),
-            "https://query.wikidata.org/bigdata/namespace/wdq/sparql",
-        )
-        .build_query(qs)
-        .run()
-        .await?;
+        let qs: SelectQueryString = QUERY.parse()?;
+        let stream = Endpoint::new(SparqlClient::default(), WIKIDATA)
+            .build_query(qs)
+            .run_stream()
+            .await?;
+
+        assert!(!stream.head.vars.is_empty());
+
+        let mut rows = std::pin::pin!(stream.into_rows());
+        while let Some(row) = rows.next().await {
+            row?;
+        }
 
         Ok(())
     }
