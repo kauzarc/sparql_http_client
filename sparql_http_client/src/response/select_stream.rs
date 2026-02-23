@@ -7,9 +7,9 @@ use csv_async::{AsyncReaderBuilder, StringRecord};
 use futures_util::{stream::Stream, StreamExt};
 use tokio_util::io::StreamReader;
 
-use super::select::{LiteralType, RDFTerm, RDFType, SelectHead};
+use super::select::{RDFTerm, RDFType};
 
-/// Error produced by a [`SelectQueryStream`].
+/// Error produced by a [`SelectQueryResponse`] stream.
 #[derive(Debug, thiserror::Error)]
 pub enum StreamError {
     /// The HTTP request or network transfer failed.
@@ -27,10 +27,10 @@ pub type Row = HashMap<Box<str>, RDFTerm>;
 
 /// A streaming SPARQL SELECT response received as tab-separated values.
 ///
-/// Returned by [`SparqlQuery<SelectQueryString>::run_stream`](crate::SparqlQuery::run_stream).
-/// The [`head`](SelectQueryStream::head) field is populated as soon as the first
+/// Returned by [`SparqlQuery<SelectQueryString>::run`](crate::SparqlQuery::run).
+/// The [`vars`](SelectQueryResponse::vars) field is populated as soon as the first
 /// line of the response is received. Rows are then yielded one at a time via
-/// [`into_rows`](SelectQueryStream::into_rows) as they arrive over the network.
+/// [`into_rows`](SelectQueryResponse::into_rows) as they arrive over the network.
 ///
 /// # Example
 ///
@@ -42,10 +42,10 @@ pub type Row = HashMap<Box<str>, RDFTerm>;
 /// let qs: SelectQueryString = "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10".parse()?;
 /// let stream = Endpoint::new(SparqlClient::default(), "https://example.org/sparql")
 ///     .build_query(qs)
-///     .run_stream()
+///     .run()
 ///     .await?;
 ///
-/// println!("vars: {:?}", stream.head.vars);
+/// println!("vars: {:?}", stream.vars);
 ///
 /// let mut rows = std::pin::pin!(stream.into_rows());
 /// while let Some(row) = rows.next().await {
@@ -53,13 +53,13 @@ pub type Row = HashMap<Box<str>, RDFTerm>;
 /// }
 /// # Ok(()) }
 /// ```
-pub struct SelectQueryStream {
-    /// The query head containing the projected variable names.
-    pub head: SelectHead,
+pub struct SelectQueryResponse {
+    /// The projected variable names from the query's SELECT clause.
+    pub vars: Box<[Box<str>]>,
     rows: Pin<Box<dyn Stream<Item = Result<Row, StreamError>> + Send>>,
 }
 
-impl SelectQueryStream {
+impl SelectQueryResponse {
     pub(crate) async fn from_response(response: reqwest::Response) -> Result<Self, StreamError> {
         let byte_stream = response.bytes_stream().map(|r| r.map_err(io::Error::other));
         let stream_reader = StreamReader::new(byte_stream);
@@ -78,11 +78,7 @@ impl SelectQueryStream {
             .map(|h| h.trim_start_matches('?').into())
             .collect();
 
-        let head = SelectHead {
-            vars: vars.clone(),
-            link: None,
-        };
-
+        let vars_stream = vars.clone();
         let rows = Box::pin(stream! {
             let mut record = StringRecord::new();
             loop {
@@ -94,7 +90,7 @@ impl SelectQueryStream {
                     Ok(false) => break,
                     Ok(true) => {
                         let mut row = Row::new();
-                        for (var, cell) in vars.iter().zip(record.iter()) {
+                        for (var, cell) in vars_stream.iter().zip(record.iter()) {
                             match parse_tsv_cell(cell) {
                                 Err(e) => {
                                     yield Err(e);
@@ -112,12 +108,12 @@ impl SelectQueryStream {
             }
         });
 
-        Ok(Self { head, rows })
+        Ok(Self { vars, rows })
     }
 
     /// Consumes this value and returns the row stream.
     ///
-    /// Use [`head`](SelectQueryStream::head) before calling this if you need
+    /// Use [`vars`](SelectQueryResponse::vars) before calling this if you need
     /// the projected variable names.
     pub fn into_rows(self) -> impl Stream<Item = Result<Row, StreamError>> {
         self.rows
@@ -150,7 +146,8 @@ fn parse_tsv_cell(s: &str) -> Result<Option<RDFTerm>, StreamError> {
         let (value, rest) = parse_quoted_str(s)?;
         let kind = if let Some(lang) = rest.strip_prefix('@') {
             RDFType::Literal {
-                kind: LiteralType::WithLanguage { lang: lang.into() },
+                lang: Some(lang.into()),
+                datatype: None,
             }
         } else if let Some(dt) = rest.strip_prefix("^^") {
             let datatype = dt
@@ -158,13 +155,13 @@ fn parse_tsv_cell(s: &str) -> Result<Option<RDFTerm>, StreamError> {
                 .and_then(|s| s.strip_suffix('>'))
                 .ok_or_else(|| StreamError::Parse(format!("invalid datatype IRI: {dt:?}")))?;
             RDFType::Literal {
-                kind: LiteralType::WithDataType {
-                    datatype: datatype.into(),
-                },
+                lang: None,
+                datatype: Some(datatype.into()),
             }
         } else if rest.is_empty() {
             RDFType::Literal {
-                kind: LiteralType::Simple {},
+                lang: None,
+                datatype: None,
             }
         } else {
             return Err(StreamError::Parse(format!(
@@ -267,7 +264,8 @@ mod tests {
         assert_eq!(
             term.kind,
             RDFType::Literal {
-                kind: LiteralType::Simple {}
+                lang: None,
+                datatype: None,
             }
         );
     }

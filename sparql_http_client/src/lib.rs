@@ -6,10 +6,10 @@ pub mod response;
 
 pub use client::{Endpoint, SparqlClient, UserAgent};
 pub use query::{
-    AskQuery, AskQueryString, QueryString, QueryStringError, QueryType, SelectQuery,
-    SelectQueryString, SparqlQuery,
+    AskQuery, AskQueryString, QueryString, QueryStringError, QueryType, SelectQueryString,
+    SparqlQuery,
 };
-pub use response::{QueryResponse, Row, SelectQueryStream, StreamError};
+pub use response::{AskQueryResponse, QueryResponse, Row, SelectQueryResponse, StreamError};
 pub use sparql_http_client_macros::query;
 
 #[cfg(test)]

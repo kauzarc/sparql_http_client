@@ -13,12 +13,11 @@ use std::str::FromStr;
 use spargebra::Query;
 
 use crate::client::Endpoint;
-use crate::response::{QueryResponse, SelectQueryStream, StreamError};
+use crate::response::{AskQueryResponse, SelectQueryResponse, StreamError};
 
 /// An owned, validated, normalized SPARQL query string.
 ///
-/// Implementors hold the query text and declare the [`QueryResponse`] type
-/// their query kind produces. The two built-in implementations are
+/// Implementors hold the query text. The two built-in implementations are
 /// [`SelectQueryString`] and [`AskQueryString`].
 ///
 /// Obtain an instance by parsing at runtime with [`str::parse`]:
@@ -34,9 +33,6 @@ use crate::response::{QueryResponse, SelectQueryStream, StreamError};
 pub trait QueryString:
     Sized + Clone + Deref<Target = str> + FromStr<Err = QueryStringError>
 {
-    /// The response type produced when this query is executed.
-    type Response: QueryResponse;
-
     #[doc(hidden)]
     fn new_unchecked(s: &str) -> Self;
 
@@ -54,33 +50,26 @@ pub trait QueryString:
 /// An executable SPARQL query bound to an [`Endpoint`].
 ///
 /// Created by [`Endpoint::build_query`] or the [`query!`](crate::query) macro.
-/// Call [`run`](SparqlQuery::run) to send the request and deserialize the response.
 ///
-/// The type parameter `Q` determines the response type:
-/// - `SparqlQuery<SelectQueryString>` → [`SelectQueryResponse`](crate::response::SelectQueryResponse)
-/// - `SparqlQuery<AskQueryString>` → [`AskQueryResponse`](crate::response::AskQueryResponse)
+/// - `SparqlQuery<SelectQueryString>`: call [`run_stream`](SparqlQuery::run_stream)
+/// - `SparqlQuery<AskQueryString>`: call [`run`](SparqlQuery::run)
 ///
-/// See also the type aliases [`SelectQuery`] and [`AskQuery`].
+/// See also the type alias [`AskQuery`].
 #[derive(Debug)]
 pub struct SparqlQuery<Q> {
     endpoint: Endpoint,
     query: Q,
 }
 
-impl<Q: QueryString> SparqlQuery<Q> {
-    /// Sends the query to the endpoint and deserializes the response.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`reqwest::Error`] if the HTTP request fails or the response
-    /// cannot be deserialized.
-    pub async fn run(self) -> Result<Q::Response, reqwest::Error> {
+impl SparqlQuery<AskQueryString> {
+    /// Sends the ASK query to the endpoint and deserializes the response.
+    pub async fn run(self) -> Result<AskQueryResponse, reqwest::Error> {
         self.endpoint
             .request()
             .form(&[("query", &*self.query)])
             .send()
             .await?
-            .json::<Q::Response>()
+            .json::<AskQueryResponse>()
             .await
     }
 }
@@ -88,32 +77,19 @@ impl<Q: QueryString> SparqlQuery<Q> {
 impl SparqlQuery<SelectQueryString> {
     /// Sends the query and streams result rows as they arrive over the network.
     ///
-    /// Unlike [`run`](SparqlQuery::run), this does not buffer the full response.
     /// The endpoint is asked for `text/tab-separated-values`; the
-    /// [`head`](SelectQueryStream::head) field is populated from the first line,
-    /// then rows are yielded one at a time via [`SelectQueryStream::into_rows`].
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`StreamError`] if the HTTP request fails or the header line
-    /// cannot be parsed. Per-row parse errors are yielded as `Err` items in
-    /// the row stream.
-    pub async fn run_stream(self) -> Result<SelectQueryStream, StreamError> {
+    /// [`vars`](SelectQueryResponse::vars) field is populated from the first line,
+    /// then rows are yielded one at a time via [`SelectQueryResponse::into_rows`].
+    pub async fn run(self) -> Result<SelectQueryResponse, StreamError> {
         let response = self
             .endpoint
             .request_tsv()
             .form(&[("query", &*self.query)])
             .send()
             .await?;
-        SelectQueryStream::from_response(response).await
+        SelectQueryResponse::from_response(response).await
     }
 }
-
-/// Type alias for a SELECT query bound to an endpoint.
-///
-/// Returned by [`query!`](crate::query) for `SELECT` statements, or by
-/// [`Endpoint::build_query`] with a [`SelectQueryString`].
-pub type SelectQuery = SparqlQuery<SelectQueryString>;
 
 /// Type alias for an ASK query bound to an endpoint.
 ///
@@ -124,8 +100,7 @@ pub type AskQuery = SparqlQuery<AskQueryString>;
 /// The kind of a SPARQL query.
 ///
 /// Used in [`QueryStringError::WrongKind`] to describe a mismatch between the
-/// expected and actual query type — for example, passing an ASK query string
-/// where a SELECT is expected.
+/// expected and actual query type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueryType {
     /// A `SELECT` query, returning a table of variable bindings.

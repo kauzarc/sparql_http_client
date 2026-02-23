@@ -6,7 +6,6 @@ use std::sync::Arc;
 use spargebra::SparqlParser;
 
 use super::{QueryString, QueryStringError, QueryType};
-use crate::response::AskQueryResponse;
 
 /// An owned, validated, normalized ASK query string.
 ///
@@ -62,8 +61,6 @@ impl fmt::Display for AskQueryString {
 }
 
 impl QueryString for AskQueryString {
-    type Response = AskQueryResponse;
-
     fn new_unchecked(s: &str) -> Self {
         Self(Arc::from(s))
     }

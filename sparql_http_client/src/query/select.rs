@@ -6,7 +6,6 @@ use std::sync::Arc;
 use spargebra::SparqlParser;
 
 use super::{QueryString, QueryStringError, QueryType};
-use crate::response::SelectQueryResponse;
 
 /// An owned, validated, normalized SELECT query string.
 ///
@@ -71,8 +70,6 @@ impl fmt::Display for SelectQueryString {
 }
 
 impl QueryString for SelectQueryString {
-    type Response = SelectQueryResponse;
-
     fn new_unchecked(s: &str) -> Self {
         Self(Arc::from(s))
     }
@@ -95,26 +92,16 @@ mod tests {
     "#;
 
     #[tokio::test]
-    async fn run() -> anyhow::Result<()> {
-        let qs: SelectQueryString = QUERY.parse()?;
-        Endpoint::new(SparqlClient::default(), WIKIDATA)
-            .build_query(qs)
-            .run()
-            .await?;
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn run_stream() -> anyhow::Result<()> {
         use futures_util::StreamExt;
 
         let qs: SelectQueryString = QUERY.parse()?;
         let stream = Endpoint::new(SparqlClient::default(), WIKIDATA)
             .build_query(qs)
-            .run_stream()
+            .run()
             .await?;
 
-        assert!(!stream.head.vars.is_empty());
+        assert!(!stream.vars.is_empty());
 
         let mut rows = std::pin::pin!(stream.into_rows());
         while let Some(row) = rows.next().await {
