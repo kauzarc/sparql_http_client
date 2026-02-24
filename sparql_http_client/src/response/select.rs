@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, de};
+use serde::{de, Deserialize, Deserializer};
 
 /// A single RDF term: the value bound to a variable in one result row.
 #[derive(Debug, Clone, PartialEq, Eq)]
