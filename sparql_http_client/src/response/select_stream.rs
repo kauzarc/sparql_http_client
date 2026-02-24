@@ -1,30 +1,38 @@
-use std::collections::HashMap;
 use std::io;
 use std::pin::Pin;
+use std::{collections::HashMap, sync::Arc};
 
-use async_stream::stream;
-use csv_async::{AsyncReaderBuilder, StringRecord};
+use csv_async::AsyncReaderBuilder;
 use futures_util::{stream::Stream, StreamExt};
-use serde::{Deserialize, de::IntoDeserializer, de::value::Error as DeError};
+use serde::{de::value::Error as DeError, de::IntoDeserializer, Deserialize};
+use thiserror::Error;
 use tokio_util::io::StreamReader;
 
 use super::select::RDFTerm;
 
 /// Error produced by a [`SelectQueryResponse`] stream.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum StreamError {
     /// The HTTP request or network transfer failed.
     #[error(transparent)]
     Http(#[from] reqwest::Error),
     /// The response body could not be parsed as SPARQL TSV.
     #[error("parse error: {0}")]
-    Parse(String),
+    Parse(#[from] ParseError),
+}
+
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error(transparent)]
+    Csv(#[from] csv_async::Error),
+    #[error(transparent)]
+    Serde(#[from] serde::de::value::Error),
 }
 
 /// A single result row: variable name → RDF term.
 ///
 /// Variables that are unbound in a given row are absent from the map.
-pub type Row = HashMap<Box<str>, RDFTerm>;
+pub type Row = HashMap<Arc<str>, RDFTerm>;
 
 /// A streaming SPARQL SELECT response received as tab-separated values.
 ///
@@ -56,7 +64,7 @@ pub type Row = HashMap<Box<str>, RDFTerm>;
 /// ```
 pub struct SelectQueryResponse {
     /// The projected variable names from the query's SELECT clause.
-    pub vars: Box<[Box<str>]>,
+    pub vars: Box<[Arc<str>]>,
     rows: Pin<Box<dyn Stream<Item = Result<Row, StreamError>> + Send>>,
 }
 
@@ -71,45 +79,31 @@ impl SelectQueryResponse {
         let headers = csv_reader
             .headers()
             .await
-            .map_err(|e| StreamError::Parse(e.to_string()))?
+            .map_err(ParseError::from)?
             .clone();
 
-        let vars: Box<[Box<str>]> = headers
+        let vars: Box<[Arc<str>]> = headers
             .iter()
             .map(|h| h.trim_start_matches('?').into())
             .collect();
 
-        let vars_stream = vars.clone();
-        let rows = Box::pin(stream! {
-            let mut record = StringRecord::new();
-            loop {
-                match csv_reader.read_record(&mut record).await {
-                    Err(e) => {
-                        yield Err(StreamError::Parse(e.to_string()));
-                        return;
-                    }
-                    Ok(false) => break,
-                    Ok(true) => {
-                        let mut row = Row::new();
-                        for (var, cell) in vars_stream.iter().zip(record.iter()) {
-                            if cell.is_empty() {
-                                continue;
-                            }
-                            match deserialize_cell(cell) {
-                                Err(e) => {
-                                    yield Err(StreamError::Parse(e.to_string()));
-                                    return;
-                                }
-                                Ok(term) => {
-                                    row.insert(var.clone(), term);
-                                }
-                            }
-                        }
-                        yield Ok(row);
-                    }
-                }
-            }
-        });
+        let vars_cloned = vars.clone();
+        let rows = Box::pin(csv_reader.into_records().map(move |record| {
+            let record = record.map_err(ParseError::from)?;
+            let row = vars_cloned
+                .iter()
+                .cloned()
+                .zip(record.into_iter())
+                .filter_map(|(var, cell)| {
+                    (!cell.is_empty()).then(|| {
+                        deserialize_cell(cell)
+                            .map(|term| (var, term))
+                            .map_err(ParseError::from)
+                    })
+                })
+                .collect::<Result<Row, ParseError>>()?;
+            Ok(row)
+        }));
 
         Ok(Self { vars, rows })
     }
