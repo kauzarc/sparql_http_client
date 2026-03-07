@@ -1,237 +1,122 @@
-use serde::{de, Deserialize, Deserializer};
+use std::io;
+use std::pin::Pin;
+use std::{collections::HashMap, sync::Arc};
 
-/// A single RDF term: the value bound to a variable in one result row.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RDFTerm {
-    pub value: Box<str>,
-    pub kind: RDFType,
+use csv_async::AsyncReaderBuilder;
+use futures_util::{stream::Stream, StreamExt};
+use serde::{de::value::Error as DeError, de::IntoDeserializer, Deserialize};
+use thiserror::Error;
+use tokio_util::io::StreamReader;
+
+use super::term::RDFTerm;
+
+/// Error produced by a [`SelectQueryResponse`] stream.
+#[derive(Debug, Error)]
+pub enum StreamError {
+    /// The HTTP request or network transfer failed.
+    #[error(transparent)]
+    Http(#[from] reqwest::Error),
+    /// The response body could not be parsed as SPARQL TSV.
+    #[error("parse error: {0}")]
+    Parse(#[from] ParseError),
 }
 
-impl RDFTerm {
-    pub fn is_iri(&self) -> bool {
-        matches!(self.kind, RDFType::IRI)
-    }
-
-    pub fn is_literal(&self) -> bool {
-        matches!(self.kind, RDFType::Literal { .. })
-    }
-
-    pub fn is_blank_node(&self) -> bool {
-        matches!(self.kind, RDFType::BlankNode)
-    }
-
-    /// Returns the language tag if this is a language-tagged literal.
-    pub fn lang(&self) -> Option<&str> {
-        if let RDFType::Literal { lang, .. } = &self.kind {
-            lang.as_deref()
-        } else {
-            None
-        }
-    }
-
-    /// Returns the datatype IRI if this is a datatyped literal.
-    pub fn datatype(&self) -> Option<&str> {
-        if let RDFType::Literal { datatype, .. } = &self.kind {
-            datatype.as_deref()
-        } else {
-            None
-        }
-    }
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error(transparent)]
+    Csv(#[from] csv_async::Error),
+    #[error(transparent)]
+    Serde(#[from] serde::de::value::Error),
 }
 
-impl<'de> Deserialize<'de> for RDFTerm {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_str(RDFTermVisitor)
-    }
+/// A single result row: variable name → RDF term.
+///
+/// Variables that are unbound in a given row are absent from the map.
+pub type Row = HashMap<Arc<str>, RDFTerm>;
+
+/// A streaming SPARQL SELECT response received as tab-separated values.
+///
+/// Returned by [`SparqlQuery<SelectQueryString>::run`](crate::SparqlQuery::run).
+/// The [`vars`](SelectQueryResponse::vars) field is populated as soon as the first
+/// line of the response is received. Rows are then yielded one at a time via
+/// [`into_rows`](SelectQueryResponse::into_rows) as they arrive over the network.
+///
+/// # Example
+///
+/// ```no_run
+/// use futures_util::StreamExt;
+/// use sparql_http_client::{Endpoint, SparqlClient, SelectQueryString};
+///
+/// # #[tokio::main] async fn main() -> anyhow::Result<()> {
+/// let qs: SelectQueryString = "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10".parse()?;
+/// let stream = Endpoint::new(SparqlClient::default(), "https://example.org/sparql")
+///     .build_query(qs)
+///     .run()
+///     .await?;
+///
+/// println!("vars: {:?}", stream.vars);
+///
+/// let mut rows = std::pin::pin!(stream.into_rows());
+/// while let Some(row) = rows.next().await {
+///     println!("{:?}", row?);
+/// }
+/// # Ok(()) }
+/// ```
+pub struct SelectQueryResponse {
+    /// The projected variable names from the query's SELECT clause.
+    pub vars: Box<[Arc<str>]>,
+    rows: Pin<Box<dyn Stream<Item = Result<Row, StreamError>> + Send>>,
 }
 
-struct RDFTermVisitor;
+impl SelectQueryResponse {
+    pub(crate) async fn from_response(response: reqwest::Response) -> Result<Self, StreamError> {
+        let byte_stream = response.bytes_stream().map(|r| r.map_err(io::Error::other));
+        let stream_reader = StreamReader::new(byte_stream);
+        let mut builder = AsyncReaderBuilder::new();
+        builder.delimiter(b'\t');
+        let mut csv_reader = builder.create_reader(stream_reader);
 
-impl<'de> de::Visitor<'de> for RDFTermVisitor {
-    type Value = RDFTerm;
+        let headers = csv_reader
+            .headers()
+            .await
+            .map_err(ParseError::from)?
+            .clone();
 
-    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.write_str("a TSV-encoded RDF term")
+        let vars: Box<[Arc<str>]> = headers
+            .iter()
+            .map(|h| h.trim_start_matches('?').into())
+            .collect();
+
+        let vars_cloned = vars.clone();
+        let rows = Box::pin(csv_reader.into_records().map(move |record| {
+            let record = record.map_err(ParseError::from)?;
+            let row = vars_cloned
+                .iter()
+                .cloned()
+                .zip(record.into_iter())
+                .filter_map(|(var, cell)| {
+                    (!cell.is_empty()).then(|| {
+                        deserialize_cell(cell)
+                            .map(|term| (var, term))
+                            .map_err(ParseError::from)
+                    })
+                })
+                .collect::<Result<Row, ParseError>>()?;
+            Ok(row)
+        }));
+
+        Ok(Self { vars, rows })
     }
 
-    fn visit_str<E: de::Error>(self, s: &str) -> Result<Self::Value, E> {
-        // IRI: <http://example.org/>
-        if let Some(iri) = s.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
-            return Ok(RDFTerm {
-                value: iri.into(),
-                kind: RDFType::IRI,
-            });
-        }
-
-        // Blank node: _:b0
-        if let Some(id) = s.strip_prefix("_:") {
-            return Ok(RDFTerm {
-                value: id.into(),
-                kind: RDFType::BlankNode,
-            });
-        }
-
-        // Literal: "..."  "..."@lang  "..."^^<datatype>
-        if s.starts_with('"') {
-            let (value, rest) = parse_quoted_str(s).map_err(E::custom)?;
-            let kind = if let Some(lang) = rest.strip_prefix('@') {
-                RDFType::Literal {
-                    lang: Some(lang.into()),
-                    datatype: None,
-                }
-            } else if let Some(dt) = rest.strip_prefix("^^") {
-                let datatype = dt
-                    .strip_prefix('<')
-                    .and_then(|s| s.strip_suffix('>'))
-                    .ok_or_else(|| E::custom(format!("invalid datatype IRI: {dt:?}")))?;
-                RDFType::Literal {
-                    lang: None,
-                    datatype: Some(datatype.into()),
-                }
-            } else if rest.is_empty() {
-                RDFType::Literal {
-                    lang: None,
-                    datatype: None,
-                }
-            } else {
-                return Err(E::custom(format!(
-                    "unexpected suffix after literal: {rest:?}"
-                )));
-            };
-            return Ok(RDFTerm {
-                value: value.into(),
-                kind,
-            });
-        }
-
-        Err(E::custom(format!("unrecognized TSV cell: {s:?}")))
-    }
-}
-
-/// Parses a quoted N-Triples-style string starting at `s[0] == '"'`.
-/// Returns the unescaped content and the remaining suffix after the closing `"`.
-fn parse_quoted_str(s: &str) -> Result<(String, &str), String> {
-    let inner = &s[1..]; // skip opening '"'
-    let mut value = String::new();
-    let mut chars = inner.char_indices();
-    loop {
-        match chars.next() {
-            None => return Err("unterminated string literal".into()),
-            Some((i, '"')) => return Ok((value, &inner[i + 1..])),
-            Some((_, '\\')) => match chars.next() {
-                None => return Err("unterminated escape sequence".into()),
-                Some((_, 'n')) => value.push('\n'),
-                Some((_, 'r')) => value.push('\r'),
-                Some((_, 't')) => value.push('\t'),
-                Some((_, '"')) => value.push('"'),
-                Some((_, '\'')) => value.push('\''),
-                Some((_, '\\')) => value.push('\\'),
-                Some((_, 'u')) => {
-                    let hex: String = chars.by_ref().take(4).map(|(_, c)| c).collect();
-                    if hex.len() != 4 {
-                        return Err(format!("incomplete \\u escape: {hex:?}"));
-                    }
-                    let code = u32::from_str_radix(&hex, 16)
-                        .map_err(|_| format!("invalid \\u escape: {hex:?}"))?;
-                    let ch = char::from_u32(code)
-                        .ok_or_else(|| format!("invalid unicode codepoint U+{code:04X}"))?;
-                    value.push(ch);
-                }
-                Some((_, 'U')) => {
-                    let hex: String = chars.by_ref().take(8).map(|(_, c)| c).collect();
-                    if hex.len() != 8 {
-                        return Err(format!("incomplete \\U escape: {hex:?}"));
-                    }
-                    let code = u32::from_str_radix(&hex, 16)
-                        .map_err(|_| format!("invalid \\U escape: {hex:?}"))?;
-                    let ch = char::from_u32(code)
-                        .ok_or_else(|| format!("invalid unicode codepoint U+{code:08X}"))?;
-                    value.push(ch);
-                }
-                Some((_, c)) => return Err(format!("unknown escape \\{c}")),
-            },
-            Some((_, c)) => value.push(c),
-        }
+    /// Consumes this value and returns the row stream.
+    ///
+    /// Use [`vars`](SelectQueryResponse::vars) before calling this if you need
+    /// the projected variable names.
+    pub fn into_rows(self) -> impl Stream<Item = Result<Row, StreamError>> {
+        self.rows
     }
 }
 
-/// The type of an RDF term.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RDFType {
-    /// An IRI.
-    IRI,
-    /// A literal, optionally with a language tag or datatype IRI.
-    Literal {
-        lang: Option<Box<str>>,
-        datatype: Option<Box<str>>,
-    },
-    /// A blank node.
-    BlankNode,
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::Value;
-
-    use super::*;
-
-    fn parse_term(s: &str) -> serde_json::Result<RDFTerm> {
-        serde_json::from_value(Value::String(s.to_string()))
-    }
-
-    #[test]
-    fn parse_iri() {
-        let term = parse_term("<http://example.org/>").unwrap();
-        assert_eq!(&*term.value, "http://example.org/");
-        assert_eq!(term.kind, RDFType::IRI);
-    }
-
-    #[test]
-    fn parse_blank_node() {
-        let term = parse_term("_:b0").unwrap();
-        assert_eq!(&*term.value, "b0");
-        assert_eq!(term.kind, RDFType::BlankNode);
-    }
-
-    #[test]
-    fn parse_simple_literal() {
-        let term = parse_term(r#""hello""#).unwrap();
-        assert_eq!(&*term.value, "hello");
-        assert_eq!(
-            term.kind,
-            RDFType::Literal {
-                lang: None,
-                datatype: None,
-            }
-        );
-    }
-
-    #[test]
-    fn parse_lang_literal() {
-        let term = parse_term(r#""hello"@en"#).unwrap();
-        assert_eq!(&*term.value, "hello");
-        assert_eq!(term.lang(), Some("en"));
-    }
-
-    #[test]
-    fn parse_typed_literal() {
-        let term = parse_term(r#""42"^^<http://www.w3.org/2001/XMLSchema#integer>"#).unwrap();
-        assert_eq!(&*term.value, "42");
-        assert_eq!(
-            term.datatype(),
-            Some("http://www.w3.org/2001/XMLSchema#integer")
-        );
-    }
-
-    #[test]
-    fn parse_escaped_quotes_in_literal() {
-        let term = parse_term(r#""hello \"world\"""#).unwrap();
-        assert_eq!(&*term.value, r#"hello "world""#);
-    }
-
-    #[test]
-    fn parse_unicode_escape() {
-        let term = parse_term(r#""\u0041""#).unwrap();
-        assert_eq!(&*term.value, "A");
-    }
+fn deserialize_cell(s: &str) -> Result<RDFTerm, DeError> {
+    RDFTerm::deserialize(s.into_deserializer())
 }

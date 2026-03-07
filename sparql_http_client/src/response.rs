@@ -1,10 +1,10 @@
 mod ask;
 mod select;
-mod select_stream;
+mod term;
 
 pub use ask::*;
 pub use select::*;
-pub use select_stream::*;
+pub use term::*;
 
 use serde::de::DeserializeOwned;
 
