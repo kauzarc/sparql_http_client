@@ -43,45 +43,40 @@ impl FromStr for RDFTerm {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // IRI: <http://example.org/>
-        if let Some(iri) = s.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
-            return Ok(RDFTerm {
-                value: iri.into(),
+        match s.as_bytes() {
+            // IRI: <http://example.org/>
+            [b'<', .., b'>'] => Ok(RDFTerm {
+                value: s[1..s.len() - 1].into(),
                 kind: RDFType::IRI,
-            });
-        }
-
-        // Blank node: _:b0
-        if let Some(id) = s.strip_prefix("_:") {
-            return Ok(RDFTerm {
-                value: id.into(),
+            }),
+            // Blank node: _:b0
+            [b'_', b':', ..] => Ok(RDFTerm {
+                value: s[2..].into(),
                 kind: RDFType::BlankNode,
-            });
+            }),
+            // Literal: "..."  "..."@lang  "..."^^<datatype>
+            [b'"', ..] => {
+                let (value, rest) = parse_quoted_str(s)?;
+                let literal_type = match rest.as_bytes() {
+                    [b'@', ..] => LiteralType::Lang(rest[1..].into()),
+                    [b'^', b'^', ..] => {
+                        let dt = &rest[2..];
+                        let datatype = match dt.as_bytes() {
+                            [b'<', .., b'>'] => &dt[1..dt.len() - 1],
+                            _ => return Err(format!("invalid datatype IRI: {dt:?}")),
+                        };
+                        LiteralType::Datatype(datatype.into())
+                    }
+                    [] => LiteralType::Plain,
+                    _ => return Err(format!("unexpected suffix after literal: {rest:?}")),
+                };
+                Ok(RDFTerm {
+                    value: value.into(),
+                    kind: RDFType::Literal(literal_type),
+                })
+            }
+            _ => Err(format!("unrecognized TSV cell: {s:?}")),
         }
-
-        // Literal: "..."  "..."@lang  "..."^^<datatype>
-        if s.starts_with('"') {
-            let (value, rest) = parse_quoted_str(s)?;
-            let literal_type = if let Some(lang) = rest.strip_prefix('@') {
-                LiteralType::Lang(lang.into())
-            } else if let Some(dt) = rest.strip_prefix("^^") {
-                let datatype = dt
-                    .strip_prefix('<')
-                    .and_then(|s| s.strip_suffix('>'))
-                    .ok_or_else(|| format!("invalid datatype IRI: {dt:?}"))?;
-                LiteralType::Datatype(datatype.into())
-            } else if rest.is_empty() {
-                LiteralType::Plain
-            } else {
-                return Err(format!("unexpected suffix after literal: {rest:?}"));
-            };
-            return Ok(RDFTerm {
-                value: value.into(),
-                kind: RDFType::Literal(literal_type),
-            });
-        }
-
-        Err(format!("unrecognized TSV cell: {s:?}"))
     }
 }
 
