@@ -1,6 +1,30 @@
 use std::str::FromStr;
 
 use serde::{de, Deserialize, Deserializer};
+use thiserror::Error;
+
+/// Error returned when parsing a TSV-encoded RDF term fails.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum ParseTermError {
+    #[error("unrecognized TSV cell: {0:?}")]
+    UnrecognizedCell(Box<str>),
+    #[error("unterminated string literal")]
+    UnterminatedLiteral,
+    #[error("unterminated escape sequence")]
+    UnterminatedEscape,
+    #[error("unknown escape sequence: \\{0}")]
+    UnknownEscape(char),
+    #[error("incomplete unicode escape: {0:?}")]
+    IncompleteUnicodeEscape(Box<str>),
+    #[error("invalid unicode escape: {0:?}")]
+    InvalidUnicodeEscape(Box<str>),
+    #[error("invalid unicode codepoint: U+{0:04X}")]
+    InvalidUnicodeCodepoint(u32),
+    #[error("invalid datatype IRI: {0:?}")]
+    InvalidDatatypeIri(Box<str>),
+    #[error("unexpected suffix after literal: {0:?}")]
+    UnexpectedLiteralSuffix(Box<str>),
+}
 
 /// A single RDF term: the value bound to a variable in one result row.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,7 +64,7 @@ impl RDFTerm {
 }
 
 impl FromStr for RDFTerm {
-    type Err = String;
+    type Err = ParseTermError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.as_bytes() {
@@ -63,19 +87,19 @@ impl FromStr for RDFTerm {
                         let dt = &rest[2..];
                         let datatype = match dt.as_bytes() {
                             [b'<', .., b'>'] => &dt[1..dt.len() - 1],
-                            _ => return Err(format!("invalid datatype IRI: {dt:?}")),
+                            _ => return Err(ParseTermError::InvalidDatatypeIri(dt.into())),
                         };
                         LiteralType::Datatype(datatype.into())
                     }
                     [] => LiteralType::Plain,
-                    _ => return Err(format!("unexpected suffix after literal: {rest:?}")),
+                    _ => return Err(ParseTermError::UnexpectedLiteralSuffix(rest.into())),
                 };
                 Ok(RDFTerm {
                     value: value.into(),
                     kind: RDFType::Literal(literal_type),
                 })
             }
-            _ => Err(format!("unrecognized TSV cell: {s:?}")),
+            _ => Err(ParseTermError::UnrecognizedCell(s.into())),
         }
     }
 }
@@ -102,16 +126,16 @@ impl<'de> de::Visitor<'de> for RDFTermVisitor {
 
 /// Parses a quoted N-Triples-style string starting at `s[0] == '"'`.
 /// Returns the unescaped content and the remaining suffix after the closing `"`.
-fn parse_quoted_str(s: &str) -> Result<(String, &str), String> {
+fn parse_quoted_str(s: &str) -> Result<(String, &str), ParseTermError> {
     let inner = &s[1..]; // skip opening '"'
     let mut value = String::new();
     let mut chars = inner.char_indices();
     loop {
         match chars.next() {
-            None => return Err("unterminated string literal".into()),
+            None => return Err(ParseTermError::UnterminatedLiteral),
             Some((i, '"')) => return Ok((value, &inner[i + 1..])),
             Some((_, '\\')) => match chars.next() {
-                None => return Err("unterminated escape sequence".into()),
+                None => return Err(ParseTermError::UnterminatedEscape),
                 Some((_, 'n')) => value.push('\n'),
                 Some((_, 'r')) => value.push('\r'),
                 Some((_, 't')) => value.push('\t'),
@@ -120,7 +144,7 @@ fn parse_quoted_str(s: &str) -> Result<(String, &str), String> {
                 Some((_, '\\')) => value.push('\\'),
                 Some((_, 'u')) => value.push(parse_unicode_escape(&mut chars, 4)?),
                 Some((_, 'U')) => value.push(parse_unicode_escape(&mut chars, 8)?),
-                Some((_, c)) => return Err(format!("unknown escape \\{c}")),
+                Some((_, c)) => return Err(ParseTermError::UnknownEscape(c)),
             },
             Some((_, c)) => value.push(c),
         }
@@ -130,14 +154,14 @@ fn parse_quoted_str(s: &str) -> Result<(String, &str), String> {
 fn parse_unicode_escape(
     chars: &mut impl Iterator<Item = (usize, char)>,
     n: usize,
-) -> Result<char, String> {
+) -> Result<char, ParseTermError> {
     let hex: String = chars.by_ref().take(n).map(|(_, c)| c).collect();
     if hex.len() != n {
-        return Err(format!("incomplete unicode escape: {hex:?}"));
+        return Err(ParseTermError::IncompleteUnicodeEscape(hex.into()));
     }
     let code = u32::from_str_radix(&hex, 16)
-        .map_err(|_| format!("invalid unicode escape: {hex:?}"))?;
-    char::from_u32(code).ok_or_else(|| format!("invalid unicode codepoint U+{code:0>width$X}", width = n))
+        .map_err(|_| ParseTermError::InvalidUnicodeEscape(hex.into()))?;
+    char::from_u32(code).ok_or(ParseTermError::InvalidUnicodeCodepoint(code))
 }
 
 /// The type of an RDF term.
