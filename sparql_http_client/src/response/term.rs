@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use serde::{de, Deserialize, Deserializer};
 
 /// A single RDF term: the value bound to a variable in one result row.
@@ -13,7 +15,7 @@ impl RDFTerm {
     }
 
     pub fn is_literal(&self) -> bool {
-        matches!(self.kind, RDFType::Literal { .. })
+        matches!(self.kind, RDFType::Literal(_))
     }
 
     pub fn is_blank_node(&self) -> bool {
@@ -22,20 +24,64 @@ impl RDFTerm {
 
     /// Returns the language tag if this is a language-tagged literal.
     pub fn lang(&self) -> Option<&str> {
-        if let RDFType::Literal { lang, .. } = &self.kind {
-            lang.as_deref()
-        } else {
-            None
+        match &self.kind {
+            RDFType::Literal(LiteralType::Lang(lang)) => Some(lang),
+            _ => None,
         }
     }
 
     /// Returns the datatype IRI if this is a datatyped literal.
     pub fn datatype(&self) -> Option<&str> {
-        if let RDFType::Literal { datatype, .. } = &self.kind {
-            datatype.as_deref()
-        } else {
-            None
+        match &self.kind {
+            RDFType::Literal(LiteralType::Datatype(dt)) => Some(dt),
+            _ => None,
         }
+    }
+}
+
+impl FromStr for RDFTerm {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // IRI: <http://example.org/>
+        if let Some(iri) = s.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
+            return Ok(RDFTerm {
+                value: iri.into(),
+                kind: RDFType::IRI,
+            });
+        }
+
+        // Blank node: _:b0
+        if let Some(id) = s.strip_prefix("_:") {
+            return Ok(RDFTerm {
+                value: id.into(),
+                kind: RDFType::BlankNode,
+            });
+        }
+
+        // Literal: "..."  "..."@lang  "..."^^<datatype>
+        if s.starts_with('"') {
+            let (value, rest) = parse_quoted_str(s)?;
+            let literal_type = if let Some(lang) = rest.strip_prefix('@') {
+                LiteralType::Lang(lang.into())
+            } else if let Some(dt) = rest.strip_prefix("^^") {
+                let datatype = dt
+                    .strip_prefix('<')
+                    .and_then(|s| s.strip_suffix('>'))
+                    .ok_or_else(|| format!("invalid datatype IRI: {dt:?}"))?;
+                LiteralType::Datatype(datatype.into())
+            } else if rest.is_empty() {
+                LiteralType::Plain
+            } else {
+                return Err(format!("unexpected suffix after literal: {rest:?}"));
+            };
+            return Ok(RDFTerm {
+                value: value.into(),
+                kind: RDFType::Literal(literal_type),
+            });
+        }
+
+        Err(format!("unrecognized TSV cell: {s:?}"))
     }
 }
 
@@ -55,56 +101,7 @@ impl<'de> de::Visitor<'de> for RDFTermVisitor {
     }
 
     fn visit_str<E: de::Error>(self, s: &str) -> Result<Self::Value, E> {
-        // IRI: <http://example.org/>
-        if let Some(iri) = s.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
-            return Ok(RDFTerm {
-                value: iri.into(),
-                kind: RDFType::IRI,
-            });
-        }
-
-        // Blank node: _:b0
-        if let Some(id) = s.strip_prefix("_:") {
-            return Ok(RDFTerm {
-                value: id.into(),
-                kind: RDFType::BlankNode,
-            });
-        }
-
-        // Literal: "..."  "..."@lang  "..."^^<datatype>
-        if s.starts_with('"') {
-            let (value, rest) = parse_quoted_str(s).map_err(E::custom)?;
-            let kind = if let Some(lang) = rest.strip_prefix('@') {
-                RDFType::Literal {
-                    lang: Some(lang.into()),
-                    datatype: None,
-                }
-            } else if let Some(dt) = rest.strip_prefix("^^") {
-                let datatype = dt
-                    .strip_prefix('<')
-                    .and_then(|s| s.strip_suffix('>'))
-                    .ok_or_else(|| E::custom(format!("invalid datatype IRI: {dt:?}")))?;
-                RDFType::Literal {
-                    lang: None,
-                    datatype: Some(datatype.into()),
-                }
-            } else if rest.is_empty() {
-                RDFType::Literal {
-                    lang: None,
-                    datatype: None,
-                }
-            } else {
-                return Err(E::custom(format!(
-                    "unexpected suffix after literal: {rest:?}"
-                )));
-            };
-            return Ok(RDFTerm {
-                value: value.into(),
-                kind,
-            });
-        }
-
-        Err(E::custom(format!("unrecognized TSV cell: {s:?}")))
+        s.parse().map_err(E::custom)
     }
 }
 
@@ -126,28 +123,8 @@ fn parse_quoted_str(s: &str) -> Result<(String, &str), String> {
                 Some((_, '"')) => value.push('"'),
                 Some((_, '\'')) => value.push('\''),
                 Some((_, '\\')) => value.push('\\'),
-                Some((_, 'u')) => {
-                    let hex: String = chars.by_ref().take(4).map(|(_, c)| c).collect();
-                    if hex.len() != 4 {
-                        return Err(format!("incomplete \\u escape: {hex:?}"));
-                    }
-                    let code = u32::from_str_radix(&hex, 16)
-                        .map_err(|_| format!("invalid \\u escape: {hex:?}"))?;
-                    let ch = char::from_u32(code)
-                        .ok_or_else(|| format!("invalid unicode codepoint U+{code:04X}"))?;
-                    value.push(ch);
-                }
-                Some((_, 'U')) => {
-                    let hex: String = chars.by_ref().take(8).map(|(_, c)| c).collect();
-                    if hex.len() != 8 {
-                        return Err(format!("incomplete \\U escape: {hex:?}"));
-                    }
-                    let code = u32::from_str_radix(&hex, 16)
-                        .map_err(|_| format!("invalid \\U escape: {hex:?}"))?;
-                    let ch = char::from_u32(code)
-                        .ok_or_else(|| format!("invalid unicode codepoint U+{code:08X}"))?;
-                    value.push(ch);
-                }
+                Some((_, 'u')) => value.push(parse_unicode_escape(&mut chars, 4)?),
+                Some((_, 'U')) => value.push(parse_unicode_escape(&mut chars, 8)?),
                 Some((_, c)) => return Err(format!("unknown escape \\{c}")),
             },
             Some((_, c)) => value.push(c),
@@ -155,18 +132,41 @@ fn parse_quoted_str(s: &str) -> Result<(String, &str), String> {
     }
 }
 
+fn parse_unicode_escape(
+    chars: &mut impl Iterator<Item = (usize, char)>,
+    n: usize,
+) -> Result<char, String> {
+    let hex: String = chars.by_ref().take(n).map(|(_, c)| c).collect();
+    if hex.len() != n {
+        return Err(format!("incomplete unicode escape: {hex:?}"));
+    }
+    let code = u32::from_str_radix(&hex, 16)
+        .map_err(|_| format!("invalid unicode escape: {hex:?}"))?;
+    char::from_u32(code).ok_or_else(|| format!("invalid unicode codepoint U+{code:0>width$X}", width = n))
+}
+
 /// The type of an RDF term.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RDFType {
     /// An IRI.
     IRI,
-    /// A literal, optionally with a language tag or datatype IRI.
-    Literal {
-        lang: Option<Box<str>>,
-        datatype: Option<Box<str>>,
-    },
+    /// A literal, with its optional annotation.
+    Literal(LiteralType),
     /// A blank node.
     BlankNode,
+}
+
+/// The annotation carried by an RDF literal.
+///
+/// These three cases are mutually exclusive per the RDF specification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LiteralType {
+    /// A plain literal with no language tag or datatype.
+    Plain,
+    /// A language-tagged literal (`"..."@lang`).
+    Lang(Box<str>),
+    /// A datatyped literal (`"..."^^<datatype>`).
+    Datatype(Box<str>),
 }
 
 #[cfg(test)]
@@ -197,13 +197,7 @@ mod tests {
     fn parse_simple_literal() {
         let term = parse_term(r#""hello""#).unwrap();
         assert_eq!(&*term.value, "hello");
-        assert_eq!(
-            term.kind,
-            RDFType::Literal {
-                lang: None,
-                datatype: None,
-            }
-        );
+        assert_eq!(term.kind, RDFType::Literal(LiteralType::Plain));
     }
 
     #[test]
