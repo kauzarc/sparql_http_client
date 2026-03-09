@@ -63,42 +63,54 @@ impl RDFTerm {
     }
 }
 
+impl RDFTerm {
+    /// Caller must guarantee `s` starts with `<` and ends with `>`.
+    fn from_bracketed_iri(s: &str) -> Self {
+        RDFTerm {
+            value: s[1..s.len() - 1].into(),
+            kind: RDFType::IRI,
+        }
+    }
+
+    /// Caller must guarantee `s` starts with `_:`.
+    fn from_prefixed_blank_node(s: &str) -> Self {
+        RDFTerm {
+            value: s[2..].into(),
+            kind: RDFType::BlankNode,
+        }
+    }
+
+    /// Caller must guarantee `s` starts with `"`.
+    fn from_quoted_literal(s: &str) -> Result<Self, ParseTermError> {
+        let (value, rest) = parse_quoted_str(s)?;
+        let literal_type = match rest.as_bytes() {
+            [b'@', ..] => LiteralType::Lang(rest[1..].into()),
+            [b'^', b'^', ..] => {
+                let dt = &rest[2..];
+                let datatype = match dt.as_bytes() {
+                    [b'<', .., b'>'] => &dt[1..dt.len() - 1],
+                    _ => return Err(ParseTermError::InvalidDatatypeIri(dt.into())),
+                };
+                LiteralType::Datatype(datatype.into())
+            }
+            [] => LiteralType::Plain,
+            _ => return Err(ParseTermError::UnexpectedLiteralSuffix(rest.into())),
+        };
+        Ok(RDFTerm {
+            value: value.into(),
+            kind: RDFType::Literal(literal_type),
+        })
+    }
+}
+
 impl FromStr for RDFTerm {
     type Err = ParseTermError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.as_bytes() {
-            // IRI: <http://example.org/>
-            [b'<', .., b'>'] => Ok(RDFTerm {
-                value: s[1..s.len() - 1].into(),
-                kind: RDFType::IRI,
-            }),
-            // Blank node: _:b0
-            [b'_', b':', ..] => Ok(RDFTerm {
-                value: s[2..].into(),
-                kind: RDFType::BlankNode,
-            }),
-            // Literal: "..."  "..."@lang  "..."^^<datatype>
-            [b'"', ..] => {
-                let (value, rest) = parse_quoted_str(s)?;
-                let literal_type = match rest.as_bytes() {
-                    [b'@', ..] => LiteralType::Lang(rest[1..].into()),
-                    [b'^', b'^', ..] => {
-                        let dt = &rest[2..];
-                        let datatype = match dt.as_bytes() {
-                            [b'<', .., b'>'] => &dt[1..dt.len() - 1],
-                            _ => return Err(ParseTermError::InvalidDatatypeIri(dt.into())),
-                        };
-                        LiteralType::Datatype(datatype.into())
-                    }
-                    [] => LiteralType::Plain,
-                    _ => return Err(ParseTermError::UnexpectedLiteralSuffix(rest.into())),
-                };
-                Ok(RDFTerm {
-                    value: value.into(),
-                    kind: RDFType::Literal(literal_type),
-                })
-            }
+            [b'<', .., b'>'] => Ok(Self::from_bracketed_iri(s)),
+            [b'_', b':', ..] => Ok(Self::from_prefixed_blank_node(s)),
+            [b'"', ..] => Self::from_quoted_literal(s),
             _ => Err(ParseTermError::UnrecognizedCell(s.into())),
         }
     }
