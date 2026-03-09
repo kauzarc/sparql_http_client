@@ -83,22 +83,9 @@ impl RDFTerm {
     /// Caller must guarantee `s` starts with `"`.
     fn from_quoted_literal(s: &str) -> Result<Self, ParseTermError> {
         let (value, rest) = parse_quoted_str(s)?;
-        let literal_type = match rest.as_bytes() {
-            [b'@', ..] => LiteralType::Lang(rest[1..].into()),
-            [b'^', b'^', ..] => {
-                let dt = &rest[2..];
-                let datatype = match dt.as_bytes() {
-                    [b'<', .., b'>'] => &dt[1..dt.len() - 1],
-                    _ => return Err(ParseTermError::InvalidDatatypeIri(dt.into())),
-                };
-                LiteralType::Datatype(datatype.into())
-            }
-            [] => LiteralType::Plain,
-            _ => return Err(ParseTermError::UnexpectedLiteralSuffix(rest.into())),
-        };
         Ok(RDFTerm {
             value: value.into(),
-            kind: RDFType::Literal(literal_type),
+            kind: RDFType::Literal(parse_literal_type(rest)?),
         })
     }
 }
@@ -136,6 +123,23 @@ impl<'de> de::Visitor<'de> for RDFTermVisitor {
     }
 }
 
+/// Parses the suffix after a closing `"` into a `LiteralType`.
+fn parse_literal_type(rest: &str) -> Result<LiteralType, ParseTermError> {
+    match rest.as_bytes() {
+        [b'@', ..] => Ok(LiteralType::Lang(rest[1..].into())),
+        [b'^', b'^', ..] => {
+            let dt = &rest[2..];
+            let datatype = match dt.as_bytes() {
+                [b'<', .., b'>'] => &dt[1..dt.len() - 1],
+                _ => return Err(ParseTermError::InvalidDatatypeIri(dt.into())),
+            };
+            Ok(LiteralType::Datatype(datatype.into()))
+        }
+        [] => Ok(LiteralType::Plain),
+        _ => Err(ParseTermError::UnexpectedLiteralSuffix(rest.into())),
+    }
+}
+
 /// Parses a quoted N-Triples-style string starting at `s[0] == '"'`.
 /// Returns the unescaped content and the remaining suffix after the closing `"`.
 fn parse_quoted_str(s: &str) -> Result<(String, &str), ParseTermError> {
@@ -167,13 +171,16 @@ fn parse_unicode_escape(
     chars: &mut impl Iterator<Item = (usize, char)>,
     n: usize,
 ) -> Result<char, ParseTermError> {
-    let hex: String = chars.by_ref().take(n).map(|(_, c)| c).collect();
-    if hex.len() != n {
-        return Err(ParseTermError::IncompleteUnicodeEscape(hex.into()));
+    let mut digits = String::with_capacity(n);
+    for _ in 0..n {
+        match chars.next() {
+            Some((_, c)) => digits.push(c),
+            None => return Err(ParseTermError::IncompleteUnicodeEscape(digits.into())),
+        }
     }
-    let code = u32::from_str_radix(&hex, 16)
-        .map_err(|_| ParseTermError::InvalidUnicodeEscape(hex.into()))?;
-    char::from_u32(code).ok_or(ParseTermError::InvalidUnicodeCodepoint(code))
+    let codepoint = u32::from_str_radix(&digits, 16)
+        .map_err(|_| ParseTermError::InvalidUnicodeEscape(digits.into()))?;
+    char::from_u32(codepoint).ok_or(ParseTermError::InvalidUnicodeCodepoint(codepoint))
 }
 
 /// The type of an RDF term.
