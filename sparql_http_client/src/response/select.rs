@@ -4,11 +4,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use csv_async::AsyncReaderBuilder;
 use futures_util::{stream::Stream, StreamExt};
-use serde::{de::value::Error as DeError, de::IntoDeserializer, Deserialize};
 use thiserror::Error;
 use tokio_util::io::StreamReader;
 
-use super::term::RDFTerm;
+use super::term::{ParseTermError, RDFTerm};
 
 /// Error produced by a [`SelectQueryResponse`] stream.
 #[derive(Debug, Error)]
@@ -26,7 +25,7 @@ pub enum ParseError {
     #[error(transparent)]
     Csv(#[from] csv_async::Error),
     #[error(transparent)]
-    Serde(#[from] serde::de::value::Error),
+    Term(#[from] ParseTermError),
 }
 
 /// A single result row: variable name → RDF term.
@@ -96,7 +95,7 @@ impl SelectQueryResponse {
                 .zip(record.into_iter())
                 .filter_map(|(var, cell)| {
                     (!cell.is_empty()).then(|| {
-                        deserialize_cell(cell)
+                        cell.parse::<RDFTerm>()
                             .map(|term| (var, term))
                             .map_err(ParseError::from)
                     })
@@ -117,6 +116,3 @@ impl SelectQueryResponse {
     }
 }
 
-fn deserialize_cell(s: &str) -> Result<RDFTerm, DeError> {
-    RDFTerm::deserialize(s.into_deserializer())
-}
