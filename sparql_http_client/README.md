@@ -5,6 +5,7 @@ An async, typed SPARQL HTTP client for Rust with optional compile-time query val
 ## Quick start
 
 ```rust,no_run
+use futures_util::StreamExt;
 use sparql_http_client::{Endpoint, SparqlClient, query};
 
 #[tokio::main]
@@ -31,7 +32,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .run()
     .await?;
 
-    for row in &response {
+    let mut rows = std::pin::pin!(response.into_rows());
+    while let Some(row) = rows.next().await {
+        let row = row?;
         let label = row.get("countryLabel").map(|t| t.value.as_ref()).unwrap_or("?");
         let pop   = row.get("population").map(|t| t.value.as_ref()).unwrap_or("?");
         println!("{label}: {pop}");

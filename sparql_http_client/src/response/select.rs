@@ -72,7 +72,7 @@ impl SelectQueryResponse {
         let byte_stream = response.bytes_stream().map(|r| r.map_err(io::Error::other));
         let stream_reader = StreamReader::new(byte_stream);
         let mut builder = AsyncReaderBuilder::new();
-        builder.delimiter(b'\t');
+        builder.delimiter(b'\t').quoting(false);
         let mut csv_reader = builder.create_reader(stream_reader);
 
         let headers = csv_reader
