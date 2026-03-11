@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::{collections::HashMap, sync::Arc};
 
 use csv_async::AsyncReaderBuilder;
-use futures_util::{stream::Stream, StreamExt};
+use futures_util::{stream::Stream, StreamExt, TryStreamExt};
 use thiserror::Error;
 use tokio_util::io::StreamReader;
 
@@ -113,6 +113,13 @@ impl SelectQueryResponse {
     /// the projected variable names.
     pub fn into_rows(self) -> impl Stream<Item = Result<Row, StreamError>> {
         self.rows
+    }
+
+    /// Collects all rows into a [`Vec`], consuming this response.
+    ///
+    /// Returns an error if any row fails to parse or if the HTTP transfer fails.
+    pub async fn collect(self) -> Result<Vec<Row>, StreamError> {
+        self.rows.try_collect().await
     }
 }
 

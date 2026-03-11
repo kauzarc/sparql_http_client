@@ -110,4 +110,21 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn run_collect() -> anyhow::Result<()> {
+        let qs: SelectQueryString = QUERY.parse()?;
+        let stream = Endpoint::new(SparqlClient::default(), WIKIDATA)
+            .build_query(qs)
+            .run()
+            .await?;
+
+        let vars = stream.vars.clone();
+        let rows = stream.collect().await?;
+
+        assert!(!vars.is_empty());
+        assert_eq!(rows.len(), 3);
+
+        Ok(())
+    }
 }
