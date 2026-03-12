@@ -9,7 +9,7 @@ pub use query::{
     AskQuery, AskQueryString, QueryString, QueryStringError, QueryType, SelectQueryString,
     SparqlQuery,
 };
-pub use response::{AskQueryResponse, QueryResponse, Row, SelectQueryResponse, StreamError};
+pub use response::{AskQueryResponse, Row, SelectQueryResponse, StreamError};
 pub use sparql_http_client_macros::query;
 
 #[cfg(test)]

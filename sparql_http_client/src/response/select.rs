@@ -1,6 +1,7 @@
 use std::io;
 use std::pin::Pin;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
+use std::collections::HashMap;
 
 use csv_async::AsyncReaderBuilder;
 use futures_util::{stream::Stream, StreamExt, TryStreamExt};
@@ -63,7 +64,7 @@ pub type Row = HashMap<Arc<str>, RDFTerm>;
 /// ```
 pub struct SelectQueryResponse {
     /// The projected variable names from the query's SELECT clause.
-    pub vars: Box<[Arc<str>]>,
+    pub vars: Arc<[Arc<str>]>,
     rows: Pin<Box<dyn Stream<Item = Result<Row, StreamError>> + Send>>,
 }
 
@@ -81,26 +82,21 @@ impl SelectQueryResponse {
             .map_err(ParseError::from)?
             .clone();
 
-        let vars: Box<[Arc<str>]> = headers
+        let vars: Arc<[Arc<str>]> = headers
             .iter()
             .map(|h| h.trim_start_matches('?').into())
             .collect();
 
-        let vars_cloned = vars.clone();
+        let vars_cloned = Arc::clone(&vars);
         let rows = Box::pin(csv_reader.into_records().map(move |record| {
             let record = record.map_err(ParseError::from)?;
-            let row = vars_cloned
-                .iter()
-                .cloned()
-                .zip(record.into_iter())
-                .filter_map(|(var, cell)| {
-                    (!cell.is_empty()).then(|| {
-                        cell.parse::<RDFTerm>()
-                            .map(|term| (var, term))
-                            .map_err(ParseError::from)
-                    })
-                })
-                .collect::<Result<Row, ParseError>>()?;
+            let mut row = Row::with_capacity(vars_cloned.len());
+            for (var, cell) in vars_cloned.iter().cloned().zip(record.into_iter()) {
+                if !cell.is_empty() {
+                    let term = cell.parse::<RDFTerm>().map_err(ParseError::from)?;
+                    row.insert(var, term);
+                }
+            }
             Ok(row)
         }));
 

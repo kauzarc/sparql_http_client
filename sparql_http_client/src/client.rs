@@ -118,26 +118,20 @@ impl Endpoint {
         }
     }
 
-    pub(crate) fn request(&self) -> RequestBuilder {
+    fn request_with_accept(&self, accept: &'static str) -> RequestBuilder {
         self.client
             .inner
             .post(&*self.url)
-            .header(
-                ACCEPT,
-                HeaderValue::from_static("application/sparql-results+json"),
-            )
+            .header(ACCEPT, HeaderValue::from_static(accept))
             .header(USER_AGENT, self.client.agent.header_value())
     }
 
+    pub(crate) fn request(&self) -> RequestBuilder {
+        self.request_with_accept("application/sparql-results+json")
+    }
+
     pub(crate) fn request_tsv(&self) -> RequestBuilder {
-        self.client
-            .inner
-            .post(&*self.url)
-            .header(
-                ACCEPT,
-                HeaderValue::from_static("text/tab-separated-values"),
-            )
-            .header(USER_AGENT, self.client.agent.header_value())
+        self.request_with_accept("text/tab-separated-values")
     }
 
     /// Wraps `query` in a [`SparqlQuery`] ready to be executed against this endpoint.

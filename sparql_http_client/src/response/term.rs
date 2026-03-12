@@ -61,9 +61,7 @@ impl RDFTerm {
             _ => None,
         }
     }
-}
 
-impl RDFTerm {
     /// Caller must guarantee `s` starts with `<` and ends with `>`.
     fn from_bracketed_iri(s: &str) -> Self {
         RDFTerm {
