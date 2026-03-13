@@ -51,10 +51,10 @@ pub trait QueryString:
 ///
 /// Created by [`Endpoint::build_query`] or the [`query!`](crate::query) macro.
 ///
-/// - `SparqlQuery<SelectQueryString>`: call [`run_stream`](SparqlQuery::run_stream)
+/// - `SparqlQuery<SelectQueryString>`: call [`run`](SparqlQuery::run)
 /// - `SparqlQuery<AskQueryString>`: call [`run`](SparqlQuery::run)
 ///
-/// See also the type alias [`AskQuery`].
+/// See also the type aliases [`SelectQuery`] and [`AskQuery`].
 #[derive(Debug)]
 pub struct SparqlQuery<Q> {
     endpoint: Endpoint,
@@ -90,6 +90,12 @@ impl SparqlQuery<SelectQueryString> {
         SelectQueryResponse::from_response(response).await
     }
 }
+
+/// Type alias for a SELECT query bound to an endpoint.
+///
+/// Returned by [`query!`](crate::query) for `SELECT` statements, or by
+/// [`Endpoint::build_query`] with a [`SelectQueryString`].
+pub type SelectQuery = SparqlQuery<SelectQueryString>;
 
 /// Type alias for an ASK query bound to an endpoint.
 ///
