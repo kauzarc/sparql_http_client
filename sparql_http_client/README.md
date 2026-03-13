@@ -129,18 +129,39 @@ let endpoint = Endpoint::new(
 `term.value` always holds the string representation of an RDF term regardless
 of its type, so reading values requires no type matching:
 
-```rust,ignore
-for row in &response {
+```rust,no_run
+use futures_util::StreamExt;
+use sparql_http_client::{Endpoint, SparqlClient, query};
+
+# #[tokio::main] async fn main() -> Result<(), Box<dyn std::error::Error>> {
+# let endpoint = Endpoint::new(SparqlClient::default(), "https://example.org/sparql");
+let response = query!(endpoint, "SELECT ?label WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label } LIMIT 5")
+    .run().await?;
+
+let mut rows = std::pin::pin!(response.into_rows());
+while let Some(row) = rows.next().await {
+    let row = row?;
     if let Some(term) = row.get("label") {
         println!("{}", term.value);
     }
 }
+# Ok(()) }
 ```
 
 When the RDF type matters, use the convenience methods on `RDFTerm`:
 
-```rust,ignore
-for row in &response {
+```rust,no_run
+use futures_util::StreamExt;
+use sparql_http_client::{Endpoint, SparqlClient, query};
+
+# #[tokio::main] async fn main() -> Result<(), Box<dyn std::error::Error>> {
+# let endpoint = Endpoint::new(SparqlClient::default(), "https://example.org/sparql");
+let response = query!(endpoint, "SELECT ?obj WHERE { ?s ?p ?obj } LIMIT 5")
+    .run().await?;
+
+let mut rows = std::pin::pin!(response.into_rows());
+while let Some(row) = rows.next().await {
+    let row = row?;
     if let Some(term) = row.get("obj") {
         if term.is_iri() {
             println!("IRI: {}", term.value);
@@ -153,28 +174,39 @@ for row in &response {
         }
     }
 }
+# Ok(()) }
 ```
 
 Or match on `kind` for exhaustive handling:
 
-```rust,ignore
+```rust,no_run
+use futures_util::StreamExt;
+use sparql_http_client::{Endpoint, SparqlClient, query};
 use sparql_http_client::response::{RDFType, LiteralType};
 
-for row in &response {
+# #[tokio::main] async fn main() -> Result<(), Box<dyn std::error::Error>> {
+# let endpoint = Endpoint::new(SparqlClient::default(), "https://example.org/sparql");
+let response = query!(endpoint, "SELECT ?obj WHERE { ?s ?p ?obj } LIMIT 5")
+    .run().await?;
+
+let mut rows = std::pin::pin!(response.into_rows());
+while let Some(row) = rows.next().await {
+    let row = row?;
     if let Some(term) = row.get("obj") {
         match &term.kind {
             RDFType::IRI => println!("IRI: {}", term.value),
             RDFType::BlankNode => println!("blank node"),
-            RDFType::Literal { kind: LiteralType::WithLanguage { lang } } => {
+            RDFType::Literal(LiteralType::Lang(lang)) => {
                 println!("\"{}\"@{lang}", term.value);
             }
-            RDFType::Literal { kind: LiteralType::WithDataType { datatype } } => {
-                println!("\"{}\"^^{datatype}", term.value);
+            RDFType::Literal(LiteralType::Datatype(dt)) => {
+                println!("\"{}\"^^{dt}", term.value);
             }
-            RDFType::Literal { kind: LiteralType::Simple {} } => {
+            RDFType::Literal(LiteralType::Plain) => {
                 println!("\"{}\"", term.value);
             }
         }
     }
 }
+# Ok(()) }
 ```

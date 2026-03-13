@@ -32,9 +32,12 @@ The central abstraction is the `QueryString` trait (`query.rs`). Each SPARQL que
 
 Both `QueryString` newtypes wrap an `Arc<str>` holding the **spargebra-normalized** form of the query (not the original input), so `Deref`/`Display` output may differ from what was parsed.
 
-`QueryString::build(endpoint)` consumes the `Endpoint` and wraps it with the query in a `SparqlQuery<Q>`. **`Endpoint` must be cloned to reuse it across multiple queries.** Calling `.run().await` sends a form-encoded POST and deserializes the JSON response into `Q::Response`.
+`QueryString::build(endpoint)` consumes the `Endpoint` and wraps it with the query in a `SparqlQuery<Q>`. **`Endpoint` must be cloned to reuse it across multiple queries.** Calling `.run().await` sends a form-encoded POST and returns the response.
 
-`SelectQueryResponse` and `AskQueryResponse` are in `response/select.rs` and `response/ask.rs` respectively; the `response` module glob-re-exports all public types including `RDFTerm`, `RDFType`, `LiteralType`, `SelectHead`, `Results`, and `AskHead`.
+- `SparqlQuery<SelectQueryString>::run()` sends `Accept: text/tab-separated-values` and returns a `SelectQueryResponse` — a streaming handle whose `vars` field is populated from the TSV header, with rows yielded one at a time via `into_rows()` or collected via `collect()`.
+- `SparqlQuery<AskQueryString>::run()` sends `Accept: application/sparql-results+json` and deserializes the JSON response into `AskQueryResponse`.
+
+`SelectQueryResponse` and `AskQueryResponse` are in `response/select.rs` and `response/ask.rs` respectively; the `response` module glob-re-exports all public types including `RDFTerm`, `RDFType`, `LiteralType`, `ParseError`, `StreamError`, `Row`, and `AskHead`.
 
 ### Compile-time vs runtime validation
 
