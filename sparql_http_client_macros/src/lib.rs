@@ -50,10 +50,10 @@ fn build_query_expr(endpoint: &Expr, qs_type: TokenStream2, normalized: &str) ->
     }
 }
 
-/// Creates a [`sparql_http_client::SparqlQuery`] with compile-time SPARQL syntax validation.
+/// Creates a `SparqlQuery` with compile-time SPARQL syntax validation.
 ///
 /// The query kind (`SELECT`, `ASK`, …) is resolved at compile time, so the returned value is
-/// already typed as [`sparql_http_client::SelectQuery`] or [`sparql_http_client::AskQuery`],
+/// already typed as `SelectQuery` or `AskQuery`,
 /// and `.run().await` yields the matching response type with no runtime parsing overhead.
 ///
 /// A malformed or unsupported query kind is a **compile error**.

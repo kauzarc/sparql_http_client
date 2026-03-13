@@ -6,7 +6,6 @@ use std::sync::Arc;
 use spargebra::SparqlParser;
 
 use super::{QueryString, QueryStringError, QueryType};
-use crate::response::AskQueryResponse;
 
 /// An owned, validated, normalized ASK query string.
 ///
@@ -19,7 +18,7 @@ use crate::response::AskQueryResponse;
 ///     "ASK { <http://example.org/> a <http://example.org/Thing> }".parse().unwrap();
 /// ```
 ///
-/// Passing the wrong query kind returns a [`QueryStringError::WrongKind`](crate::QueryStringError::WrongKind):
+/// Passing the wrong query kind returns a [`QueryStringError::WrongKind`]:
 ///
 /// ```
 /// use sparql_http_client::AskQueryString;
@@ -62,8 +61,6 @@ impl fmt::Display for AskQueryString {
 }
 
 impl QueryString for AskQueryString {
-    type Response = AskQueryResponse;
-
     fn new_unchecked(s: &str) -> Self {
         Self(Arc::from(s))
     }

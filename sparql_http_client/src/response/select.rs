@@ -1,315 +1,121 @@
+use std::io;
+use std::pin::Pin;
+use std::sync::Arc;
 use std::collections::HashMap;
-use std::slice::Iter;
 
-use serde::{Deserialize, Serialize};
+use csv_async::AsyncReaderBuilder;
+use futures_util::{stream::Stream, StreamExt, TryStreamExt};
+use thiserror::Error;
+use tokio_util::io::StreamReader;
 
-/// The deserialized response to a SPARQL SELECT query.
+use super::term::{ParseTermError, RDFTerm};
+
+/// Error produced by a [`SelectQueryResponse`] stream.
+#[derive(Debug, Error)]
+pub enum StreamError {
+    /// The HTTP request or network transfer failed.
+    #[error(transparent)]
+    Http(#[from] reqwest::Error),
+    /// The response body could not be parsed as SPARQL TSV.
+    #[error("parse error: {0}")]
+    Parse(#[from] ParseError),
+}
+
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error(transparent)]
+    Csv(#[from] csv_async::Error),
+    #[error(transparent)]
+    Term(#[from] ParseTermError),
+}
+
+/// A single result row: variable name → RDF term.
 ///
-/// Use [`rows`](SelectQueryResponse::rows) to iterate over result rows, and
-/// [`vars`](SelectQueryResponse::vars) to inspect the projected variables.
-/// Implements [`IntoIterator`] so you can iterate rows directly with `for row in &response`.
+/// Variables that are unbound in a given row are absent from the map.
+pub type Row = HashMap<Arc<str>, RDFTerm>;
+
+/// A streaming SPARQL SELECT response received as tab-separated values.
+///
+/// Returned by [`SparqlQuery<SelectQueryString>::run`](crate::SparqlQuery::run).
+/// The [`vars`](SelectQueryResponse::vars) field is populated as soon as the first
+/// line of the response is received. Rows are then yielded one at a time via
+/// [`into_rows`](SelectQueryResponse::into_rows) as they arrive over the network.
 ///
 /// # Example
 ///
-/// ```
-/// use sparql_http_client::response::{SelectQueryResponse, SelectHead, Results, RDFTerm, RDFType};
-/// use std::collections::HashMap;
+/// ```no_run
+/// use futures_util::StreamExt;
+/// use sparql_http_client::{Endpoint, SparqlClient, SelectQueryString};
 ///
-/// let response = SelectQueryResponse {
-///     head: SelectHead { vars: vec!["s".into()].into(), link: None },
-///     results: Results {
-///         bindings: vec![
-///             HashMap::from([("s".into(), RDFTerm {
-///                 value: "http://example.org/".into(),
-///                 kind: RDFType::IRI,
-///             })]),
-///         ].into(),
-///     },
-/// };
+/// # #[tokio::main] async fn main() -> anyhow::Result<()> {
+/// let qs: SelectQueryString = "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10".parse()?;
+/// let stream = Endpoint::new(SparqlClient::default(), "https://example.org/sparql")
+///     .build_query(qs)
+///     .run()
+///     .await?;
 ///
-/// assert_eq!(response.vars(), &["s".into()]);
+/// println!("vars: {:?}", stream.vars);
 ///
-/// for row in &response {
-///     println!("{}", row["s"].value);
+/// let mut rows = std::pin::pin!(stream.into_rows());
+/// while let Some(row) = rows.next().await {
+///     println!("{:?}", row?);
 /// }
+/// # Ok(()) }
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SelectQueryResponse {
-    pub head: SelectHead,
-    pub results: Results,
+    /// The projected variable names from the query's SELECT clause.
+    pub vars: Arc<[Arc<str>]>,
+    rows: Pin<Box<dyn Stream<Item = Result<Row, StreamError>> + Send>>,
 }
 
 impl SelectQueryResponse {
-    /// Returns the projected variable names declared in the query's `SELECT` clause.
-    ///
-    /// For `SELECT ?s ?p WHERE { ... }` this returns `["s", "p"]`.
-    pub fn vars(&self) -> &[Box<str>] {
-        &self.head.vars
-    }
+    pub(crate) async fn from_response(response: reqwest::Response) -> Result<Self, StreamError> {
+        let byte_stream = response.bytes_stream().map(|r| r.map_err(io::Error::other));
+        let stream_reader = StreamReader::new(byte_stream);
+        let mut builder = AsyncReaderBuilder::new();
+        builder.delimiter(b'\t').quoting(false);
+        let mut csv_reader = builder.create_reader(stream_reader);
 
-    /// Returns a slice of the result rows.
-    ///
-    /// Each row is a [`HashMap`] mapping variable names (without the `?`) to
-    /// their [`RDFTerm`] value. Variables that are unbound in a given row are
-    /// absent from the map.
-    pub fn rows(&self) -> &[HashMap<Box<str>, RDFTerm>] {
-        &self.results.bindings
-    }
-}
+        let headers = csv_reader
+            .headers()
+            .await
+            .map_err(ParseError::from)?
+            .clone();
 
-impl<'a> IntoIterator for &'a SelectQueryResponse {
-    type Item = &'a HashMap<Box<str>, RDFTerm>;
-    type IntoIter = Iter<'a, HashMap<Box<str>, RDFTerm>>;
+        let vars: Arc<[Arc<str>]> = headers
+            .iter()
+            .map(|h| h.trim_start_matches('?').into())
+            .collect();
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.rows().iter()
-    }
-}
-
-/// The `head` section of a SPARQL SELECT response.
-///
-/// Contains the list of projected variable names. Prefer
-/// [`SelectQueryResponse::vars`] over accessing this directly.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SelectHead {
-    pub vars: Box<[Box<str>]>,
-    pub link: Option<Box<[Box<str>]>>,
-}
-
-/// The `results` section of a SPARQL SELECT response.
-///
-/// Contains the binding rows. Prefer [`SelectQueryResponse::rows`] or
-/// iterating with `for row in &response` over accessing this directly.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Results {
-    pub bindings: Box<[HashMap<Box<str>, RDFTerm>]>,
-}
-
-/// A single RDF term: the value bound to a variable in one result row.
-///
-/// The [`value`](RDFTerm::value) field always holds the string representation
-/// regardless of kind — useful when you just need the value and don't care
-/// about the RDF type. Use [`kind`](RDFTerm::kind) or the convenience methods
-/// when the type matters.
-///
-/// # Example
-///
-/// ```
-/// use sparql_http_client::response::{RDFTerm, RDFType, LiteralType};
-///
-/// let iri = RDFTerm { value: "http://example.org/".into(), kind: RDFType::IRI };
-/// assert!(iri.is_iri());
-/// assert_eq!(&*iri.value, "http://example.org/");
-///
-/// let lit = RDFTerm {
-///     value: "hello".into(),
-///     kind: RDFType::Literal { kind: LiteralType::WithLanguage { lang: "en".into() } },
-/// };
-/// assert_eq!(lit.lang(), Some("en"));
-/// assert_eq!(lit.datatype(), None);
-/// ```
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct RDFTerm {
-    pub value: Box<str>,
-    #[serde(flatten)]
-    pub kind: RDFType,
-}
-
-impl RDFTerm {
-    /// Returns `true` if this term is an IRI.
-    pub fn is_iri(&self) -> bool {
-        matches!(self.kind, RDFType::IRI)
-    }
-
-    /// Returns `true` if this term is a literal.
-    pub fn is_literal(&self) -> bool {
-        matches!(self.kind, RDFType::Literal { .. })
-    }
-
-    /// Returns `true` if this term is a blank node.
-    pub fn is_blank_node(&self) -> bool {
-        matches!(self.kind, RDFType::BlankNode)
-    }
-
-    /// Returns the language tag if this is a language-tagged literal, otherwise `None`.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use sparql_http_client::response::{RDFTerm, RDFType, LiteralType};
-    ///
-    /// let term = RDFTerm {
-    ///     value: "hello".into(),
-    ///     kind: RDFType::Literal { kind: LiteralType::WithLanguage { lang: "en".into() } },
-    /// };
-    /// assert_eq!(term.lang(), Some("en"));
-    /// ```
-    pub fn lang(&self) -> Option<&str> {
-        if let RDFType::Literal {
-            kind: LiteralType::WithLanguage { lang },
-        } = &self.kind
-        {
-            Some(lang)
-        } else {
-            None
-        }
-    }
-
-    /// Returns the datatype IRI if this is a datatyped literal, otherwise `None`.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use sparql_http_client::response::{RDFTerm, RDFType, LiteralType};
-    ///
-    /// let term = RDFTerm {
-    ///     value: "42".into(),
-    ///     kind: RDFType::Literal {
-    ///         kind: LiteralType::WithDataType {
-    ///             datatype: "http://www.w3.org/2001/XMLSchema#integer".into(),
-    ///         },
-    ///     },
-    /// };
-    /// assert_eq!(term.datatype(), Some("http://www.w3.org/2001/XMLSchema#integer"));
-    /// ```
-    pub fn datatype(&self) -> Option<&str> {
-        if let RDFType::Literal {
-            kind: LiteralType::WithDataType { datatype },
-        } = &self.kind
-        {
-            Some(datatype)
-        } else {
-            None
-        }
-    }
-}
-
-/// The type of an RDF term in a SPARQL SELECT response.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "type")]
-pub enum RDFType {
-    /// An IRI (Internationalized Resource Identifier).
-    #[serde(rename = "uri")]
-    IRI,
-    /// A literal value, optionally with a language tag or datatype.
-    #[serde(rename = "literal")]
-    Literal {
-        #[serde(flatten)]
-        kind: LiteralType,
-    },
-    /// A blank node.
-    #[serde(rename = "bnode")]
-    BlankNode,
-}
-
-/// The subtype of an RDF literal term.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(untagged)]
-pub enum LiteralType {
-    /// A language-tagged literal, e.g. `"hello"@en`.
-    WithLanguage {
-        #[serde(rename = "xml:lang")]
-        lang: Box<str>,
-    },
-    /// A datatyped literal, e.g. `"42"^^xsd:integer`.
-    WithDataType { datatype: Box<str> },
-    /// A plain literal with no language tag or datatype.
-    Simple {},
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn struct_format() -> SelectQueryResponse {
-        SelectQueryResponse {
-            head: SelectHead {
-                vars: vec!["obj".into()].into(),
-                link: None,
-            },
-            results: Results {
-                bindings: vec![
-                    HashMap::from([(
-                        "obj".into(),
-                        RDFTerm {
-                            value: "http://creativecommons.org/publicdomain/zero/1.0/".into(),
-                            kind: RDFType::IRI,
-                        },
-                    )]),
-                    HashMap::from([(
-                        "obj".into(),
-                        RDFTerm {
-                            value: "1.0.0".into(),
-                            kind: RDFType::Literal {
-                                kind: LiteralType::Simple {},
-                            },
-                        },
-                    )]),
-                    HashMap::from([(
-                        "obj".into(),
-                        RDFTerm {
-                            value: "2023-01-30T23:00:08Z".into(),
-                            kind: RDFType::Literal {
-                                kind: LiteralType::WithDataType {
-                                    datatype: "http://www.w3.org/2001/XMLSchema#dateTime".into(),
-                                },
-                            },
-                        },
-                    )]),
-                ]
-                .into(),
-            },
-        }
-    }
-
-    fn text_format() -> &'static str {
-        r#"
-        {
-            "head": {
-                "vars": [
-                    "obj"
-                ]
-            },
-            "results": {
-                "bindings": [
-                    {
-                        "obj": {
-                            "type": "uri",
-                            "value": "http://creativecommons.org/publicdomain/zero/1.0/"
-                        }
-                    },
-                    {
-                        "obj": {
-                            "type": "literal",
-                            "value": "1.0.0"
-                        }
-                    },
-                    {
-                        "obj": {
-                            "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
-                            "type": "literal",
-                            "value": "2023-01-30T23:00:08Z"
-                        }
-                    }
-                ]
+        let vars_cloned = Arc::clone(&vars);
+        let rows = Box::pin(csv_reader.into_records().map(move |record| {
+            let record = record.map_err(ParseError::from)?;
+            let mut row = Row::with_capacity(vars_cloned.len());
+            for (var, cell) in vars_cloned.iter().cloned().zip(record.into_iter()) {
+                if !cell.is_empty() {
+                    let term = cell.parse::<RDFTerm>().map_err(ParseError::from)?;
+                    row.insert(var, term);
+                }
             }
-        }
-        "#
+            Ok(row)
+        }));
+
+        Ok(Self { vars, rows })
     }
 
-    #[test]
-    fn serialize() -> anyhow::Result<()> {
-        let _ = serde_json::to_string(&struct_format())?;
-
-        Ok(())
+    /// Consumes this value and returns the row stream.
+    ///
+    /// Use [`vars`](SelectQueryResponse::vars) before calling this if you need
+    /// the projected variable names.
+    pub fn into_rows(self) -> impl Stream<Item = Result<Row, StreamError>> {
+        self.rows
     }
 
-    #[test]
-    fn deserialize() -> anyhow::Result<()> {
-        let into_struct: SelectQueryResponse = serde_json::from_str(text_format())?;
-
-        assert_eq!(into_struct, struct_format());
-
-        Ok(())
+    /// Collects all rows into a [`Vec`], consuming this response.
+    ///
+    /// Returns an error if any row fails to parse or if the HTTP transfer fails.
+    pub async fn collect(self) -> Result<Vec<Row>, StreamError> {
+        self.rows.try_collect().await
     }
 }
+
