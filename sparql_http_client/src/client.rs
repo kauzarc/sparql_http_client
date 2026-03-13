@@ -88,7 +88,7 @@ impl SparqlClient {
 /// A SPARQL endpoint that executes queries over HTTP.
 ///
 /// Combines an HTTP client with a URL. Create executable queries with
-/// [`build_query`](Endpoint::build_query) or the [`query!`](crate::query) macro.
+/// [`build_query`](Endpoint::build_query) or the [`query!`](crate::query!) macro.
 ///
 /// `Endpoint` is cheap to clone — the underlying [`reqwest::Client`] shares
 /// its connection pool via reference counting.
@@ -149,7 +149,7 @@ impl Endpoint {
     /// // endpoint is still usable here
     /// ```
     ///
-    /// Prefer the [`query!`](crate::query) macro for compile-time validation.
+    /// Prefer the [`query!`](crate::query!) macro for compile-time validation.
     pub fn build_query<Q>(self, query: Q) -> SparqlQuery<Q>
     where
         Q: QueryString,

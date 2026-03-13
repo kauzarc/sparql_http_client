@@ -18,7 +18,7 @@ use super::{QueryString, QueryStringError, QueryType};
 ///     "ASK { <http://example.org/> a <http://example.org/Thing> }".parse().unwrap();
 /// ```
 ///
-/// Passing the wrong query kind returns a [`QueryStringError::WrongKind`](crate::QueryStringError::WrongKind):
+/// Passing the wrong query kind returns a [`QueryStringError::WrongKind`]:
 ///
 /// ```
 /// use sparql_http_client::AskQueryString;

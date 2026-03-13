@@ -17,7 +17,7 @@ use super::{QueryString, QueryStringError, QueryType};
 /// let qs: SelectQueryString = "SELECT ?s WHERE { ?s ?p ?o }".parse().unwrap();
 /// ```
 ///
-/// Passing the wrong query kind returns a [`QueryStringError::WrongKind`](crate::QueryStringError::WrongKind):
+/// Passing the wrong query kind returns a [`QueryStringError::WrongKind`]:
 ///
 /// ```
 /// use sparql_http_client::SelectQueryString;

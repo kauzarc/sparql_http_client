@@ -28,7 +28,7 @@ use crate::response::{AskQueryResponse, SelectQueryResponse, StreamError};
 /// let qs: SelectQueryString = "SELECT ?s WHERE { ?s ?p ?o }".parse().unwrap();
 /// ```
 ///
-/// or at compile time via the [`query!`](crate::query) macro, which also
+/// or at compile time via the [`query!`](crate::query!) macro, which also
 /// binds the query to an [`Endpoint`] in one step.
 pub trait QueryString:
     Sized + Clone + Deref<Target = str> + FromStr<Err = QueryStringError>
@@ -49,7 +49,7 @@ pub trait QueryString:
 
 /// An executable SPARQL query bound to an [`Endpoint`].
 ///
-/// Created by [`Endpoint::build_query`] or the [`query!`](crate::query) macro.
+/// Created by [`Endpoint::build_query`] or the [`query!`](crate::query!) macro.
 ///
 /// - `SparqlQuery<SelectQueryString>`: call [`run`](SparqlQuery::run)
 /// - `SparqlQuery<AskQueryString>`: call [`run`](SparqlQuery::run)
@@ -93,13 +93,13 @@ impl SparqlQuery<SelectQueryString> {
 
 /// Type alias for a SELECT query bound to an endpoint.
 ///
-/// Returned by [`query!`](crate::query) for `SELECT` statements, or by
+/// Returned by [`query!`](crate::query!) for `SELECT` statements, or by
 /// [`Endpoint::build_query`] with a [`SelectQueryString`].
 pub type SelectQuery = SparqlQuery<SelectQueryString>;
 
 /// Type alias for an ASK query bound to an endpoint.
 ///
-/// Returned by [`query!`](crate::query) for `ASK` statements, or by
+/// Returned by [`query!`](crate::query!) for `ASK` statements, or by
 /// [`Endpoint::build_query`] with an [`AskQueryString`].
 pub type AskQuery = SparqlQuery<AskQueryString>;
 
